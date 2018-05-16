@@ -7,6 +7,7 @@ import string
 import tensorlayer as tl
 from utils import *
 import pickle
+import imageio
 
 dataset = '102flowers'
 
@@ -92,10 +93,10 @@ if dataset == '102flowers':
     images_256 = []
     for name in imgs_title_list:
         # print(name)
-        img_raw = scipy.misc.imread(os.path.join(img_dir, name))  # 读入原图
+        img_raw = imageio.imread(os.path.join(img_dir, name))  # 读入原图
         img = tl.prepro.imresize(img_raw, size=[64, 64])  # (64, 64, 3) 对图像预处理为64*64
         img = img.astype(np.float32)  # 将图像类型转为float32
-        images.append(img)  # 拼接到imges中
+        images.append(img)  # 拼接到images中
     # images = np.array(images)
     # images_256 = np.array(images_256)
     print(" * loading and resizing took %ss" % (time.time() - s))
