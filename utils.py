@@ -28,7 +28,7 @@ def load_and_assign_npz(sess=None, name="", model=None):
 
 # 暂时屏蔽一些不需要的打印信息
 @contextmanager
-def suppress_stout():
+def suppress_stdout():
     with open(os.devnull, "w") as devnull:
         old_stdout = sys.stdout
         sys.stdout = devnull
@@ -70,8 +70,11 @@ def get_random_int(min=0, max=10, number=5):
     return [random.randint(min, max) for p in range(0, number)]
 
 
+#对caption进行预处理
 def preprocess_caption(line):
+    #将字符串中可能被转义的字符进行替换成空格
     prep_line = re.sub('[%s]' % re.escape(string.punctuation), ' ', line.rstrip())
+    #将所有-替换为空格
     prep_line = prep_line.replace('-', ' ')
     return prep_line
 

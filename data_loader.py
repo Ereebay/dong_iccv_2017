@@ -26,7 +26,7 @@ if dataset == '102flowers':
     captions_dict = {}  # 存放拆分的单词
     processed_capts = []  # 存档处理后的语句
     for sub_dir in caption_sub_dir:  # get caption file list
-        with suppress_stout():
+        with suppress_stdout():
             files = tl.files.load_file_list(path=sub_dir, regx='^image_[0-9]+\.txt')
             for i, f in enumerate(files):
                 file_dir = os.path.join(sub_dir, f)
@@ -39,7 +39,7 @@ if dataset == '102flowers':
                     processed_capts.append(
                         tl.nlp.process_sentence(line, start_word="<S>", end_word="</S>"))  # 将line中的词拆开装到processed_capts
                 assert len(lines) == 10, "Every flower image have 10 captions"  # 判断每个图是否有10个captions
-                captions_dict[key] = lines  # 在对应所赢的caption_dict中装在文本内容
+                captions_dict[key] = lines  # 在对应索引的caption_dict中装在文本内容
     print(" * %d x %d captions found " % (len(captions_dict), len(lines)))  # 打印caption总数 图像数量*10
 
     ## build vocab
@@ -76,7 +76,7 @@ if dataset == '102flowers':
     print("id_to_word: %s" % [vocab.id_to_word(id) for id in img_capt_ids])
 
     ## load images
-    with suppress_stout():  # get image files list
+    with suppress_stdout():  # get image files list
         imgs_title_list = sorted(tl.files.load_file_list(path=img_dir, regx='^image_[0-9]+\.jpg'))  # 读取图像文件的list
     print(" * %d images found, start loading and resizing ..." % len(imgs_title_list))
     s = time.time()
