@@ -10,6 +10,7 @@ import string
 """ The functions here will be merged into TensorLayer after finishing this project.
 """
 
+
 def load_and_assign_npz(sess=None, name="", model=None):
     assert model is not None
     assert sess is not None
@@ -23,7 +24,18 @@ def load_and_assign_npz(sess=None, name="", model=None):
         return model
 
 
-#files
+# 暂时屏蔽一些不需要的打印信息
+def suppress_stout():
+    with open(os.devnull, "w") as devnull:
+        old_stdout = sys.stdout
+        sys.stdout = devnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
+
+
+# files
 def load_folder_list(path=""):
     """Return a folder list in a folder by given a folder path.
 
@@ -32,16 +44,18 @@ def load_folder_list(path=""):
     path : a string or None
         A folder path.
     """
-    return [os.path.join(path,o) for o in os.listdir(path) if os.path.isdir(os.path.join(path,o))]
+    return [os.path.join(path, o) for o in os.listdir(path) if os.path.isdir(os.path.join(path, o))]
 
-#utils
+
+# utils
 def print_dict(dictionary={}):
     """Print all keys and items in a dictionary.
     """
     for key, value in dictionary.iteritems():
         print("key: %s  value: %s" % (str(key), str(value)))
 
-#prepro ?
+
+# prepro ?
 def get_random_int(min=0, max=10, number=5):
     """Return a list of random integer by the given range and quantity.
 
@@ -50,7 +64,8 @@ def get_random_int(min=0, max=10, number=5):
     >>> r = get_random_int(min=0, max=10, number=5)
     ... [10, 2, 3, 3, 7]
     """
-    return [random.randint(min,max) for p in range(0,number)]
+    return [random.randint(min, max) for p in range(0, number)]
+
 
 def preprocess_caption(line):
     prep_line = re.sub('[%s]' % re.escape(string.punctuation), ' ', line.rstrip())
@@ -65,52 +80,57 @@ def merge(images, size):
     for idx, image in enumerate(images):
         i = idx % size[1]
         j = idx // size[1]
-        img[j*h:j*h+h, i*w:i*w+w, :] = image
+        img[j * h:j * h + h, i * w:i * w + w, :] = image
     return img
+
 
 def imsave(images, size, path):
     return scipy.misc.imsave(path, merge(images, size))
 
+
 def save_images(images, size, image_path):
     return imsave(images, size, image_path)
 
+
 from tensorlayer.prepro import *
+
+
 def prepro_img(x, mode=None):
-    if mode=='train':
-    # rescale [0, 255] --> (-1, 1), random flip, crop, rotate
-    #   paper 5.1: During mini-batch selection for training we randomly pick
-    #   an image view (e.g. crop, flip) of the image and one of the captions
-    # flip, rotate, crop, resize : https://github.com/reedscot/icml2016/blob/master/data/donkey_folder_coco.lua
-    # flip : https://github.com/paarthneekhara/text-to-image/blob/master/Utils/image_processing.py
+    if mode == 'train':
+        # rescale [0, 255] --> (-1, 1), random flip, crop, rotate
+        #   paper 5.1: During mini-batch selection for training we randomly pick
+        #   an image view (e.g. crop, flip) of the image and one of the captions
+        # flip, rotate, crop, resize : https://github.com/reedscot/icml2016/blob/master/data/donkey_folder_coco.lua
+        # flip : https://github.com/paarthneekhara/text-to-image/blob/master/Utils/image_processing.py
         x = flip_axis(x, axis=1, is_random=True)
         x = rotation(x, rg=16, is_random=True, fill_mode='nearest')
-            # x = crop(x, wrg=50, hrg=50, is_random=True)
-            # x = imresize(x, size=[64, 64], interp='bilinear', mode=None)
-        x = imresize(x, size=[64+15, 64+15], interp='bilinear', mode=None)
+        # x = crop(x, wrg=50, hrg=50, is_random=True)
+        # x = imresize(x, size=[64, 64], interp='bilinear', mode=None)
+        x = imresize(x, size=[64 + 15, 64 + 15], interp='bilinear', mode=None)
         x = crop(x, wrg=64, hrg=64, is_random=True)
         x = x / (255. / 2.)
         x = x - 1.
         # x = x * 0.9999
-    elif mode=='train_stackGAN':
+    elif mode == 'train_stackGAN':
         x = flip_axis(x, axis=1, is_random=True)
         x = rotation(x, rg=16, is_random=True, fill_mode='nearest')
-            # x = crop(x, wrg=50, hrg=50, is_random=True)
-            # x = imresize(x, size=[64, 64], interp='bilinear', mode=None)
+        # x = crop(x, wrg=50, hrg=50, is_random=True)
+        # x = imresize(x, size=[64, 64], interp='bilinear', mode=None)
         x = imresize(x, size=[316, 316], interp='bilinear', mode=None)
         x = crop(x, wrg=256, hrg=256, is_random=True)
         x = x / (255. / 2.)
         x = x - 1.
         # x = x * 0.9999
-    elif mode=='rescale':
-    # rescale (-1, 1) --> (0, 1) for display
+    elif mode == 'rescale':
+        # rescale (-1, 1) --> (0, 1) for display
         x = (x + 1.) / 2.
-    elif mode=='debug':
+    elif mode == 'debug':
         x = flip_axis(x, axis=1, is_random=False)
         # x = rotation(x, rg=16, is_random=False, fill_mode='nearest')
         # x = crop(x, wrg=50, hrg=50, is_random=True)
         # x = imresize(x, size=[64, 64], interp='bilinear', mode=None)
         x = x / 255.
-    elif mode=='translation':
+    elif mode == 'translation':
         x = x / (255. / 2.)
         x = x - 1.
         # from skimage.filters import gaussian
@@ -122,25 +142,14 @@ def prepro_img(x, mode=None):
     return x
 
 
-
-
 def combine_and_save_image_sets(image_sets, directory):
     for i in range(len(image_sets[0])):
         combined_image = []
         for set_no in range(len(image_sets)):
-            combined_image.append( image_sets[set_no][i] )
-            combined_image.append( np.zeros((image_sets[set_no][i].shape[0], 5, 3)) )
-        combined_image = np.concatenate( combined_image, axis = 1 )
+            combined_image.append(image_sets[set_no][i])
+            combined_image.append(np.zeros((image_sets[set_no][i].shape[0], 5, 3)))
+        combined_image = np.concatenate(combined_image, axis=1)
 
-        scipy.misc.imsave( os.path.join( directory,  'combined_{}.jpg'.format(i) ), combined_image)
-
-
-
-
-
-
-
-
-
+        scipy.misc.imsave(os.path.join(directory, 'combined_{}.jpg'.format(i)), combined_image)
 
 #

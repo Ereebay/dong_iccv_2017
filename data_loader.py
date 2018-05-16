@@ -26,7 +26,7 @@ if dataset == '102flowers':
     captions_dict = {}  # 存放拆分的单词
     processed_capts = []  # 存档处理后的语句
     for sub_dir in caption_sub_dir:  # get caption file list
-        with tl.ops.suppress_stdout():
+        with suppress_stout():
             files = tl.files.load_file_list(path=sub_dir, regx='^image_[0-9]+\.txt')
             for i, f in enumerate(files):
                 file_dir = os.path.join(sub_dir, f)
@@ -76,7 +76,7 @@ if dataset == '102flowers':
     print("id_to_word: %s" % [vocab.id_to_word(id) for id in img_capt_ids])
 
     ## load images
-    with tl.ops.suppress_stdout():  # get image files list
+    with suppress_stout():  # get image files list
         imgs_title_list = sorted(tl.files.load_file_list(path=img_dir, regx='^image_[0-9]+\.jpg'))  # 读取图像文件的list
     print(" * %d images found, start loading and resizing ..." % len(imgs_title_list))
     s = time.time()
