@@ -6,6 +6,8 @@ import scipy.misc
 import numpy as np
 import re
 import string
+import sys
+from contextlib import contextmanager
 
 """ The functions here will be merged into TensorLayer after finishing this project.
 """
@@ -25,6 +27,7 @@ def load_and_assign_npz(sess=None, name="", model=None):
 
 
 # 暂时屏蔽一些不需要的打印信息
+@contextmanager
 def suppress_stout():
     with open(os.devnull, "w") as devnull:
         old_stdout = sys.stdout
