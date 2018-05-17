@@ -82,9 +82,11 @@ def main_train():
     net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
     net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
 
+    saver = tf.train.import_meta_graph('./checkpoint/model.meta')
+    saver.restore(sess,tf.train.latest_checkpoint('./checkpoint'))
     load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
     load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
-    n_epoch = 300
+    n_epoch = 50
     print_freq = 1
     n_batch_epoch = int(n_images_train / batch_size)
     # exit()
