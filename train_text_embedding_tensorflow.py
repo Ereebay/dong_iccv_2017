@@ -1,121 +1,173 @@
-import argparse
-import fasttext
 
-import torch
-import torch.nn as nn
-import torch.utils.data as data
-from torch.autograd import Variable
-import torchvision.transforms as transforms
+import os
+import tensorlayer as tl
+import tensorflow as tf
+from utils import *
+from tensorlayer.cost import *
+import pickle
+import numpy as np
+import nltk
+import time
 
-
-
-from model import VisualSemanticEmbedding
-from data import ReedICML2016
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--img_root', type=str, required=True,
-                    help='root directory that contains images')
-parser.add_argument('--caption_root', type=str, required=True,
-                    help='root directory that contains captions')
-parser.add_argument('--trainclasses_file', type=str, required=True,
-                    help='text file that contains training classes')
-parser.add_argument('--fasttext_model', type=str, required=True,
-                    help='pretrained fastText model (binary file)')
-parser.add_argument('--save_filename', type=str, required=True,
-                    help='checkpoint file')
-parser.add_argument('--num_threads', type=int, default=4,
-                    help='number of threads for fetching data (default: 4)')
-parser.add_argument('--num_epochs', type=int, default=300,
-                    help='number of threads for fetching data (default: 300)')
-parser.add_argument('--batch_size', type=int, default=64,
-                    help='batch size (default: 64)')
-parser.add_argument('--learning_rate', type=float, default=0.0002,
-                    help='learning rate (dafault: 0.0002)')
-parser.add_argument('--margin', type=float, default=0.2,
-                    help='margin for pairwise ranking loss (default: 0.2)')
-parser.add_argument('--embed_ndim', type=int, default=300,
-                    help='dimension of embedded vector (default: 300)')
-parser.add_argument('--max_nwords', type=int, default=50,
-                    help='maximum number of words (default: 50)')
-parser.add_argument('--no_cuda', action='store_true',
-                    help='do not use cuda')
-args = parser.parse_args()
-
-if not args.no_cuda and not torch.cuda.is_available():
-    print('Warning: cuda is not available on this machine.')
-    args.no_cuda = True
+from model_tensorflow import *
 
 
-def pairwise_ranking_loss(margin, x, v):
-    zero = torch.zeros(1)
-    diag_margin = margin * torch.eye(x.size(0))
-    if not args.no_cuda:
-        zero, diag_margin = zero.cuda(), diag_margin.cuda()
-    zero, diag_margin = Variable(zero), Variable(diag_margin)
+batch_size = 64
+image_size = 64
 
-    x = x / torch.norm(x, 2, 1, keepdim=True)
-    v = v / torch.norm(v, 2, 1, keepdim=True)
-    prod = torch.matmul(x, v.transpose(0, 1))
-    diag = torch.diag(prod)
-    for_x = torch.max(zero, margin - torch.unsqueeze(diag, 1) + prod) - diag_margin
-    for_v = torch.max(zero, margin - torch.unsqueeze(diag, 0) + prod) - diag_margin
-    return (torch.sum(for_x) + torch.sum(for_v)) / x.size(0)
+
+print("Loading data from pickle ...")
+with open("_vocab.pickle", 'rb') as f:
+    vocab = pickle.load(f)
+with open("_image_train.pickle", 'rb') as f:
+    _, images_train = pickle.load(f)
+with open("_image_test.pickle", 'rb') as f:
+    _, images_test = pickle.load(f)
+with open("_n.pickle", 'rb') as f:
+    n_captions_train, n_captions_test, n_captions_per_image, n_images_train, n_images_test = pickle.load(f)
+with open("_caption.pickle", 'rb') as f:
+    captions_ids_train, captions_ids_test = pickle.load(f)
+images_train = np.array(images_train)
+images_test = np.array(images_test)
+
+
+ni = int(np.ceil(np.sqrt(batch_size)))
+exists_or_mkdir("pretrain_encoder")
+exists_or_mkdir("checkpoint")
+save_dir = "checkpoint"
+
+
+def main_train():
+    ##Define model
+    t_real_image = tf.placeholder('float32', [batch_size, image_size, image_size, 3], name = 'real_image')
+    t_wrong_image = tf.placeholder('float32', [batch_size ,image_size, image_size, 3], name = 'wrong_image')
+    t_real_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='real_caption_input')
+    t_wrong_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='wrong_caption_input')
+    t_relevant_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], nmae='relevant_caption_input')
+
+    ## training inference for text-to-image mapping
+    net_cnn = cnn_encoder(t_real_image, reuse=False)
+    x = net_cnn
+    v = rnn_embed(t_real_caption, reuse=False)
+    x_w = cnn_encoder(t_wrong_image, reuse=True)
+    v_w = rnn_embed(t_wrong_caption, reuse=True)
+
+    alpha = 0.2 # margin alpha
+    rnn_loss = tf.reduce_mean(tf.maximum(0., alpha - cosine_similarity(x, v) + cosine_similarity(x, v_w))) + \
+                tf.reduce_mean(tf.maximum(0., alpha - cosine_similarity(x, v) + cosine_similarity(x_w, v)))
+
+    #inference
+    net_rnn = rnn_embed(t_real_caption, reuse=True)
+    ####======================== DEFINE TRAIN OPTS ==============================###
+    lr = 0.0002
+    lr_decay = 0.5  # decay factor for adam, https://github.com/reedscot/icml2016/blob/master/main_cls_int.lua  https://github.com/reedscot/icml2016/blob/master/scripts/train_flowers.sh
+    decay_every = 100  # https://github.com/reedscot/icml2016/blob/master/main_cls.lua
+    beta1 = 0.5
+
+    cnn_vars = tf.trainable_variables()
+    rnn_vars = tf.trainable_variables()
+
+    with tf.variable_scope('learning_rate'):
+        lr_v = tf.Variable(lr, trainable=False)
+    grads, _ = tf.clip_by_global_norm(tf.gradients(rnn_loss, rnn_vars + cnn_vars), 10)
+    optimizer = tf.train.AdamOptimizer(lr_v, beta1=beta1)  # optimizer = tf.train.GradientDescentOptimizer(lre)
+    rnn_optim = optimizer.apply_gradients(zip(grads, rnn_vars + cnn_vars))
+
+    ###============================ TRAINING ====================================###
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+    sess.run(tf.global_variables_initializer())
+
+    # load the latest checkpoints
+    net_rnn_name = os.path.join(save_dir, 'net_rnn.npz')
+    net_cnn_name = os.path.join(save_dir, 'net_cnn.npz')
+
+    load_and_assign_npz(sess=sess, name=net_rnn_name, model=net_rnn)
+    load_and_assign_npz(sess=sess, name=net_cnn_name, model=net_cnn)
+    n_epoch = 300
+    print_freq = 1
+    n_batch_epoch = int(n_images_train / batch_size)
+    # exit()
+    for epoch in range(0, n_epoch + 1):
+        start_time = time.time()
+
+        if epoch != 0 and (epoch % decay_every == 0):
+            new_lr_decay = lr_decay ** (epoch // decay_every)
+            sess.run(tf.assign(lr_v, lr * new_lr_decay))
+            log = " ** new learning rate: %f" % (lr * new_lr_decay)
+            print(log)
+            # logging.debug(log)
+        elif epoch == 0:
+            log = " ** init lr: %f  decay_every_epoch: %d, lr_decay: %f" % (lr, decay_every, lr_decay)
+            print(log)
+
+        for step in range(n_batch_epoch):
+            step_time = time.time()
+            ## get matched text
+            idexs = get_random_int(min=0, max=n_captions_train - 1, number=batch_size)
+            b_real_caption = captions_ids_train[idexs]
+            b_real_caption = tl.prepro.pad_sequences(b_real_caption, padding='post')
+            ## get real image
+            b_real_images = images_train[
+                np.floor(np.asarray(idexs).astype('float') / n_captions_per_image).astype('int')]
+            # save_images(b_real_images, [ni, ni], 'samples/step1_gan-cls/train_00.png')
+            ## get wrong caption
+            idexs = get_random_int(min=0, max=n_captions_train - 1, number=batch_size)
+            b_wrong_caption = captions_ids_train[idexs]
+            b_wrong_caption = tl.prepro.pad_sequences(b_wrong_caption, padding='post')
+            ## get wrong image
+            idexs2 = get_random_int(min=0, max=n_images_train - 1, number=batch_size)
+            b_wrong_images = images_train[idexs2]
+
+            b_real_images = threading_data(b_real_images, prepro_img,
+                                           mode='train')  # [0, 255] --> [-1, 1] + augmentation
+            b_wrong_images = threading_data(b_wrong_images, prepro_img, mode='train')
+            ## updates text-to-image mapping
+            if epoch < 50:
+                errRNN, _ = sess.run([rnn_loss, rnn_optim], feed_dict={
+                    t_real_image: b_real_images,
+                    t_wrong_image: b_wrong_images,
+                    t_real_caption: b_real_caption,
+                    t_wrong_caption: b_wrong_caption})
+            else:
+                errRNN = 0
+
+
+            print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4fs, rnn_loss: %.8f" \
+                  % (epoch, n_epoch, step, n_batch_epoch, time.time() - step_time, errRNN))
+
+        if (epoch + 1) % print_freq == 0:
+            print(" ** Epoch %d took %fs" % (epoch, time.time() - start_time))
+
+        ## save model
+        if (epoch != 0) and (epoch % 10) == 0:
+            tl.files.save_npz(net_cnn.all_params, name=net_cnn_name, sess=sess)
+            tl.files.save_npz(net_rnn.all_params, name=net_rnn_name, sess=sess)
+            print("[*] Save checkpoints SUCCESS!")
+
+        if (epoch != 0) and (epoch % 100) == 0:
+            tl.files.save_npz(net_cnn.all_params, name=net_cnn_name + str(epoch), sess=sess)
+            tl.files.save_npz(net_rnn.all_params, name=net_rnn_name + str(epoch), sess=sess)
 
 
 if __name__ == '__main__':
-    print('Loading a pretrained fastText model...')
-    word_embedding = fasttext.load_model(args.fasttext_model)
+    import argparse
 
-    print('Loading a dataset...')
-    train_data = ReedICML2016(args.img_root,
-                              args.caption_root,
-                              args.trainclasses_file,
-                              word_embedding,
-                              args.max_nwords,
-                              transforms.Compose([
-                                  transforms.Scale(256),
-                                  transforms.RandomCrop(224),
-                                  transforms.RandomHorizontalFlip(),
-                                  transforms.ToTensor(),
-                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                       std=[0.229, 0.224, 0.225])
-                              ]))
+    parser = argparse.ArgumentParser()
 
-    word_embedding = None
+    parser.add_argument('--mode', type=str, default="train",
+                        help='train, train_encoder, translation')
 
-    train_loader = data.DataLoader(train_data,
-                                   batch_size=args.batch_size,
-                                   shuffle=True,
-                                   num_workers=args.num_threads)
+    args = parser.parse_args()
 
-    model = VisualSemanticEmbedding(args.embed_ndim)
-    if not args.no_cuda:
-        model.cuda()
+    if args.mode == "train":
+        main_train()
 
-    optimizer = torch.optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
-                                 lr=args.learning_rate)
+    ## you would not use this part, unless you want to try style transfer on GAN-CLS paper
+    # elif args.mode == "train_encoder":
+    #     main_train_encoder()
+    #
+    # elif args.mode == "translation":
+    #     main_transaltion()
 
-    for epoch in range(args.num_epochs):
-        avg_loss = 0
-        for i, (img, desc, len_desc) in enumerate(train_loader):
-            img = Variable(img.cuda() if not args.no_cuda else img)
-            desc = Variable(desc.cuda() if not args.no_cuda else desc)
-            len_desc, indices = torch.sort(len_desc, 0, True)
-            indices = indices.numpy()
-            img = img[indices, ...]
-            desc = desc[indices, ...].transpose(0, 1)
-            desc = nn.utils.rnn.pack_padded_sequence(desc, len_desc.numpy())
+#
 
-            optimizer.zero_grad()
-            img_feat, txt_feat = model(img, desc)
-            loss = pairwise_ranking_loss(args.margin, img_feat, txt_feat)
-            avg_loss += loss.data[0]
-            loss.backward()
-            optimizer.step()
-
-            if i % 10 == 0:
-                print('Epoch [%d/%d], Iter [%d/%d], Loss: %.4f'
-                      % (epoch + 1, args.num_epochs, i + 1, len(train_loader), avg_loss / (i + 1)))
-
-        torch.save(model.state_dict(), args.save_filename)
