@@ -43,7 +43,7 @@ def main_train():
     t_wrong_image = tf.placeholder('float32', [batch_size ,image_size, image_size, 3], name = 'wrong_image')
     t_real_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='real_caption_input')
     t_wrong_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='wrong_caption_input')
-    t_relevant_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], nmae='relevant_caption_input')
+    t_relevant_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='relevant_caption_input')
 
     ## training inference for text-to-image mapping
     net_cnn = cnn_encoder(t_real_image, reuse=False)

@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from tensorlayer.layers import *
 
 def vggclassifier(input):
     net_0 = input
@@ -142,9 +142,19 @@ def rnn_embed(input_seqs, reuse=False):
     w_init = tf.random_normal_initializer(stddev=0.02)
     LSTMCell = tf.contrib.rnn.BasicLSTMCell
     with tf.variable_scope("rnnftxt", reuse=reuse):
-        embed_matrix = tf.get_variable('embed_matrix',
-                                       shape[vocab_size, word_embedding_size],
-                                       initializer=tf.random_uniform_initializer())
-        network = tf.nn.embedding_lookup(embed_matrix, input_seqs, name='embed')
-        network = tf.nn.dynamic_rnn(LSTMCell, network)
-        return network
+        network = EmbeddingInputlayer(
+                     inputs = input_seqs,
+                     vocabulary_size = vocab_size,
+                     embedding_size = word_embedding_size,
+                     E_init = w_init,
+                     name = 'rnn/wordembed')
+        network = DynamicRNNLayer(network,
+                     cell_fn = LSTMCell,
+                     cell_init_args = {'state_is_tuple' : True, 'reuse': reuse},  # for TF1.1, TF1.2 dont need to set reuse
+                     n_hidden = rnn_hidden_size,
+                     dropout = (keep_prob,keep_prob),
+                     initializer = w_init,
+                     sequence_length = retrieve_seq_length_op2(input_seqs),
+                     return_last = True,
+                     name = 'rnn/dynamic')
+        return network.outputs
