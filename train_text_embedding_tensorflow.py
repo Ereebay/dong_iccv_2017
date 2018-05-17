@@ -87,6 +87,7 @@ def main_train():
     print_freq = 1
     n_batch_epoch = int(n_images_train / batch_size)
     # exit()
+    writer = tf.summary.FileWriter('graphs/vecsimple',sess.graph)
     for epoch in range(0, n_epoch + 1):
         start_time = time.time()
 
