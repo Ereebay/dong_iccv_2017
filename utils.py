@@ -7,6 +7,7 @@ import numpy as np
 import re
 import string
 import sys
+import tensorlayer as tl
 from contextlib import contextmanager
 
 """ The functions here will be merged into TensorLayer after finishing this project.

@@ -74,6 +74,7 @@ def main_train():
     rnn_optim = optimizer.apply_gradients(zip(grads, rnn_vars + cnn_vars))
 
     ###============================ TRAINING ====================================###
+    saver = tf.train.Saver()
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     sess.run(tf.global_variables_initializer())
 
@@ -141,13 +142,15 @@ def main_train():
 
         ## save model
         if (epoch != 0) and (epoch % 10) == 0:
-            tl.files.save_npz(net_cnn.all_params, name=net_cnn_name, sess=sess)
-            tl.files.save_npz(net_rnn.all_params, name=net_rnn_name, sess=sess)
+            #tl.files.save_npz(net_cnn.all_params, name=net_cnn_name, sess=sess)
+            #tl.files.save_npz(net_rnn.all_params, name=net_rnn_name, sess=sess)
+            save_path = saver.save(sess,"checkpoint/model")
             print("[*] Save checkpoints SUCCESS!")
 
         if (epoch != 0) and (epoch % 100) == 0:
-            tl.files.save_npz(net_cnn.all_params, name=net_cnn_name + str(epoch), sess=sess)
-            tl.files.save_npz(net_rnn.all_params, name=net_rnn_name + str(epoch), sess=sess)
+            #tl.files.save_npz(net_cnn.all_params, name=net_cnn_name + str(epoch), sess=sess)
+            #tl.files.save_npz(net_rnn.all_params, name=net_rnn_name + str(epoch), sess=sess)
+            save_path = saver.save(sess, "checkpoint/model")
 
 
 if __name__ == '__main__':
