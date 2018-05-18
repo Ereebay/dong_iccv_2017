@@ -68,7 +68,7 @@ def main_train():
     discriminator = discriminator_simple
 
     net_fake_image, _ = generator(t_real_image,
-                    rnn_embed(t_relevant_caption, reuse=False),
+                    rnn_embed(t_relevant_caption, reuse=True),
                     reuse=False)
 
     net_d, disc_fake_image_logits = discriminator(
