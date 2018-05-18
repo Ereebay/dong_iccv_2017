@@ -207,7 +207,6 @@ def main_train():
             idexs3 = get_random_int(min=0, max = n_captions_train-1, number=batch_size)
             b_rel_caption = captions_ids_train[idexs3]
             b_rel_caption = tl.prepro.pad_sequences(b_rel_caption, padding='post')
-            test=rnn_embed(b_real_caption,reuse=True)
 
 
             b_real_images = threading_data(b_real_images, prepro_img, mode='train')   # [0, 255] --> [-1, 1] + augmentation
