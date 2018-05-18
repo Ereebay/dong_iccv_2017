@@ -82,7 +82,7 @@ def main_train():
 
     ## testing inference for txt2img
     net_g, _ = generator(t_real_image,
-                    rnn_embed(t_real_caption, reuse=True),
+                    rnn_embed(t_relevant_caption, reuse=True),
                     reuse=True)
 
     d_loss1 = tl.cost.sigmoid_cross_entropy(disc_real_image_logits, tf.ones_like(disc_real_image_logits), name='d1')
@@ -239,8 +239,8 @@ def main_train():
 
         if (epoch + 1) % print_freq == 0:
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
-            img_gen, rnn_out = sess.run([net_g, rnn_embed(t_real_caption,reuse=True)], feed_dict={
-                                        t_real_caption : sample_sentence,
+            img_gen, rnn_out = sess.run([net_g, rnn_embed(t_relevant_caption,reuse=True)], feed_dict={
+                                        t_relevant_caption : sample_sentence,
                                         t_real_image : imagetest})
 
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
