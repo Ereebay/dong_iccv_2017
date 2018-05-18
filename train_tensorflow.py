@@ -161,7 +161,7 @@ def main_train():
             b_real_caption = tl.prepro.pad_sequences(b_real_caption, padding='post')
             ## get real image
             b_real_images = images_train[np.floor(np.asarray(idexs).astype('float')/n_captions_per_image).astype('int')]
-            # save_images(b_real_images, [ni, ni], 'samples/step1_gan-cls/train_00.png')
+            save_images(b_real_images, [ni, ni], 'samples/before/train_00.png')
             ## get wrong caption
             idexs = get_random_int(min=0, max=n_captions_train-1, number=batch_size)
             b_wrong_caption = captions_ids_train[idexs]
@@ -194,7 +194,7 @@ def main_train():
 
         if (epoch + 1) % print_freq == 0:
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
-            img_gen, rnn_out = sess.run([net_g, rnn_embed(t_real_caption)], feed_dict={
+            img_gen, rnn_out = sess.run([net_g, rnn_embed(t_real_caption,reuse=True)], feed_dict={
                                         t_real_caption : sample_sentence,
                                         t_real_image : images_test})
 
