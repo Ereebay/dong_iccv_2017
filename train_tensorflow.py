@@ -136,12 +136,12 @@ def main_train():
         # sample_seed = np.random.uniform(low=-1, high=1, size=(sample_size, z_dim)).astype(np.float32)
     sample_sentence = ["The petals are white and the stamens are light yellow."] * int(sample_size/ni) + \
                       ["The red flower has no visible stamens."] * int(sample_size/ni) + \
-                      ["the petals on this flower are white with a yellow center"] * int(sample_size/ni) + \
-                      ["this flower has a lot of small round pink petals."] * int(sample_size/ni) + \
-                      ["this flower is orange in color, and has petals that are ruffled and rounded."] * int(sample_size/ni) + \
-                      ["the flower has yellow petals and the center of it is brown."] * int(sample_size/ni) + \
-                      ["this flower has petals that are blue and white."] * int(sample_size/ni) +\
-                      ["these white flowers have petals that start off white in color and end in a white towards the tips."] * int(sample_size/ni)
+                      ["The petals of the flower have yellow and red stipes."] * int(sample_size/ni) + \
+                      ["The petals of the flower have mixed colors of bright yellow and light green."] * int(sample_size/ni) + \
+                      ["This light purple flower has a large number of small petals."] * int(sample_size/ni) + \
+                      ["This flower has petals of pink and white color with yellow stamens."] * int(sample_size/ni) + \
+                      ["The flower shown has reddish petals with yellow edges"] * int(sample_size/ni) +\
+                      ["These white flowers have petals that start off white in color and end in a white towards the tips."] * int(sample_size/ni)
 
     # sample_sentence = captions_ids_test[0:sample_size]
     for i, sentence in enumerate(sample_sentence):
@@ -151,6 +151,23 @@ def main_train():
         # sample_sentence[i] = [vocab.word_to_id(word) for word in sentence]
         # print(sample_sentence[i])
     sample_sentence = tl.prepro.pad_sequences(sample_sentence, padding='post')
+
+    ### get image test
+    tmp = get_random_int(min=0,max=n_captions_test-1,number=64)
+    idex4 = get_random_int(min=0, max=n_images_test - 1, number=8)
+    b_test_image = images_test[idex4]
+    imagetest = images_test[np.floor(np.asarray(tmp).astype('float') / n_captions_per_image).astype('int')]
+    save_images(b_test_image, [1, 8], 'samples/ori.png')
+    for i in [0,8,16,24,32,40,48,56]:
+        imagetest[i] = b_test_image[0]
+        imagetest[i + 1] = b_test_image[1]
+        imagetest[i + 2] = b_test_image[2]
+        imagetest[i + 3] = b_test_image[3]
+        imagetest[i + 4] = b_test_image[4]
+        imagetest[i + 5] = b_test_image[5]
+        imagetest[i + 6] = b_test_image[6]
+        imagetest[i + 7] = b_test_image[7]
+    save_images(imagetest,[8,8],'samples/ori2.png')
 
     n_epoch = 300
     print_freq = 1
@@ -194,6 +211,8 @@ def main_train():
             b_real_images = threading_data(b_real_images, prepro_img, mode='train')   # [0, 255] --> [-1, 1] + augmentation
             b_wrong_images = threading_data(b_wrong_images, prepro_img, mode='train')
 
+
+
             ## updates text-to-image mapping
             if epoch < 50:
                 errRNN, _ = sess.run([rnn_loss, rnn_optim], feed_dict={
@@ -222,7 +241,7 @@ def main_train():
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
             img_gen, rnn_out = sess.run([net_g, rnn_embed(t_real_caption,reuse=True)], feed_dict={
                                         t_real_caption : sample_sentence,
-                                        t_real_image : images_test})
+                                        t_real_image : imagetest})
 
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
             save_images(img_gen, [ni, ni], 'samples/after/train_{:02d}.png'.format(epoch))
