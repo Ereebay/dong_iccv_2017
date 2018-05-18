@@ -51,7 +51,18 @@ def main_train():
     t_relevant_caption = tf.placeholder(dtype=tf.int64, shape=[batch_size, None], name='relevant_caption_input')
 
     ## training inference for text-to-image mapping
-    net_cnn = cnn_encoder(t_real_image,reuse=False)
+    net_cnn = cnn_encoder(t_real_image, reuse=False)
+    x = net_cnn
+    v = rnn_embed(t_real_caption, reuse=False)
+    x_w = cnn_encoder(t_wrong_image, reuse=True)
+    v_w = rnn_embed(t_wrong_caption, reuse=True)
+
+
+    alpha = 0.2 # margin alpha
+    rnn_loss = tf.reduce_mean(tf.maximum(0., alpha - cosine_similarity(x, v) + cosine_similarity(x, v_w))) + \
+                tf.reduce_mean(tf.maximum(0., alpha - cosine_similarity(x, v) + cosine_similarity(x_w, v)))
+
+    #inference
     ## training inference for txt2img
     generator = generator_simple
     discriminator = discriminator_simple
@@ -95,8 +106,10 @@ def main_train():
         lr_v = tf.Variable(lr, trainable=False)
     d_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(d_loss, var_list=d_vars )
     g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars )
+    grads, _ = tf.clip_by_global_norm(tf.gradients(rnn_loss, rnn_vars + cnn_vars), 10)
     # e_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(e_loss, var_list=e_vars + c_vars)
     optimizer = tf.train.AdamOptimizer(lr_v, beta1=beta1)# optimizer = tf.train.GradientDescentOptimizer(lre)
+    rnn_optim = optimizer.apply_gradients(zip(grads, rnn_vars + cnn_vars))
 
     # adam_vars = tl.layers.get_variables_with_name('Adam', False, True)
 
@@ -181,6 +194,16 @@ def main_train():
             b_real_images = threading_data(b_real_images, prepro_img, mode='train')   # [0, 255] --> [-1, 1] + augmentation
             b_wrong_images = threading_data(b_wrong_images, prepro_img, mode='train')
 
+            ## updates text-to-image mapping
+            if epoch < 50:
+                errRNN, _ = sess.run([rnn_loss, rnn_optim], feed_dict={
+                    t_real_image: b_real_images,
+                    t_wrong_image: b_wrong_images,
+                    t_real_caption: b_real_caption,
+                    t_wrong_caption: b_wrong_caption})
+            else:
+                errRNN = 0
+
             ## updates D
             errD, _ = sess.run([d_loss, d_optim], feed_dict={
                             t_real_image: b_real_images,
@@ -192,8 +215,8 @@ def main_train():
                             t_real_image: b_real_images,
                             t_relevant_caption: b_rel_caption})
 
-            print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4fs, d_loss: %.8f, g_loss: %.8f," \
-                        % (epoch, n_epoch, step, n_batch_epoch, time.time() - step_time, errD, errG))
+            print("Epoch: [%2d/%2d] [%4d/%4d] time: %4.4fs, d_loss: %.8f, g_loss: %.8f,rnn_loss: %.8f" \
+                        % (epoch, n_epoch, step, n_batch_epoch, time.time() - step_time, errD, errG,errRNN))
 
         if (epoch + 1) % print_freq == 0:
             print(" ** Epoch %d took %fs" % (epoch, time.time()-start_time))
