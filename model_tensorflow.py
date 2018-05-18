@@ -105,6 +105,7 @@ def generator_simple(input_img, input_txt=None, reuse=False):
     with tf.variable_scope("generator", reuse=reuse):
         img_feat = imgencoder(input_img)
         txt_feat = input_txt
+        txt_feat =tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu)
         txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
         txt_feat = tf.tile(txt_feat,multiples=[1,16,16,1])
         fusion = tf.concat([img_feat,txt_feat],3)
@@ -161,6 +162,7 @@ def discriminator_simple(input_image,input_txt=None,reuse = False):
         net_h3 = tf.layers.batch_normalization(net_h3)
 
         txt_feat = input_txt
+        txt_feat = tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu)
         txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
         txt_feat = tf.tile(txt_feat,multiples=[1,4,4,1])
 

@@ -1,4 +1,4 @@
-. CONFIG
+. ./CONFIG
 
 python train_text_embedding.py \
     --img_root ${BIRDS_IMG_ROOT} \
