@@ -1,6 +1,14 @@
 import tensorflow as tf
 from tensorlayer.layers import *
 
+
+
+batch_size = 64
+image_size = 64     # 64 x 64
+c_dim = 3           # for rgb
+
+
+
 def vggclassifier(input):
     net_0 = input
     net_1 = tf.layers.dense(inputs=net_0, units=4096, activation=tf.nn.relu)
@@ -12,49 +20,6 @@ def vggclassifier(input):
     output = tf.layers.dense(inputs=net_2, units=1000)
 
     return output
-
-
-#
-# def imgdecoder(input):
-#     net_input = input
-#
-#     net_conv1 =
-#     net_conv1 = tf.layers.conv2d(inputs=net_conv1,
-#                                  filters=256,
-#                                  kernel_size=3,
-#                                  padding='same',
-#                                  use_bias=False)
-#     net_conv1 = tf.layers.batch_normalization(net_conv1)
-#     net_conv1 = tf.nn.relu(net_conv1)
-#
-#     net_conv2 =
-#     net_conv2 = tf.layers.conv2d(inputs=net_conv2,
-#                                  filters=128,
-#                                  kernel_size=3,
-#                                  padding='same',
-#                                  use_bias=False)
-#     net_conv2 = tf.layers.batch_normalization(net_conv2)
-#     net_conv2 = tf.nn.relu(net_conv2)
-#
-#     net_conv3 = tf.layers.conv2d(inputs=net_conv2,
-#                                  filters=3,
-#                                  kernel_size=3,
-#                                  padding='same',
-#                                  activation=tf.nn.tanh)
-#     output = net_conv3
-#
-#     self.decoder = nn.Sequential(
-#         nn.Upsample(scale_factor=2, mode='nearest'),
-#         nn.Conv2d(512, 256, 3, padding=1, bias=False),
-#         nn.BatchNorm2d(256),
-#         nn.ReLU(inplace=True),
-#         nn.Upsample(scale_factor=2, mode='nearest'),
-#         nn.Conv2d(256, 128, 3, padding=1, bias=False),
-#         nn.BatchNorm2d(128),
-#         nn.ReLU(inplace=True),
-#         nn.Conv2d(128, 3, 3, padding=1),
-#         nn.Tanh()
-#     )
 
 def imgencoder(input):
     net_input = input
@@ -87,6 +52,133 @@ def imgencoder(input):
     net_output = net_h2
 
     return net_output
+
+def imgdecoder(input):
+    net_input = input
+
+    # net_fc1 = tf.layers.dense(inputs=net_input,
+    #                           units=64*8*16*16)
+    # net_re1 = tf.reshape(net_fc1,[-1,16,16,64*8])
+    # net_bn1 = tf.layers.batch_normalization(net_re1)
+    # net_ac1 = tf.nn.relu(net_bn1)
+
+
+    net_h0 = tf.layers.conv2d_transpose(inputs=net_input,
+                                        filters=256,
+                                        kernel_size=4,
+                                        strides=2,
+                                        padding='same',
+                                        use_bias=False)
+    net_h0 = tf.layers.batch_normalization(net_h0)
+    net_h0 = tf.nn.relu(net_h0)
+
+    net_h1 = tf.layers.conv2d_transpose(inputs=net_h0,
+                                        filters=128,
+                                        kernel_size=4,
+                                        strides=2,
+                                        padding='same',
+                                        use_bias=False)
+    net_h1 = tf.layers.batch_normalization(net_h1)
+    net_h1 = tf.nn.relu(net_h1)
+
+    net_h2 = tf.layers.conv2d_transpose(inputs=net_h1,
+                                        filters=3,
+                                        kernel_size=3,
+                                        padding='same')
+    logits = net_h2
+    net_h2 = tf.nn.tanh(net_h2)
+    output = net_h2
+
+    return output,logits
+
+
+
+def generator_simple(input_img, input_txt=None, reuse=False):
+
+    s = image_size
+    s2, s4, s8, s16 = int(s / 2), int(s / 4), int(s / 8), int(s / 16)
+    w_init = tf.random_normal_initializer(stddev=0.02)
+    b_init = None # tf.constant_initializer(value=0.0)
+    gamma_init = tf.random_normal_initializer(1., 0.02)
+    gf_dim = 128
+
+    with tf.variable_scope("generator", reuse=reuse):
+        img_feat = imgencoder(input_img)
+        txt_feat = input_txt
+        txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
+        txt_feat = tf.tile(txt_feat,multiples=[1,16,16,1])
+        fusion = tf.concat([img_feat,txt_feat],3)
+        fusion = tf.layers.conv2d(inputs=fusion,
+                                  filters=512,
+                                  kernel_size=3,
+                                  padding='same',
+                                  use_bias=False)
+        fusion = tf.layers.batch_normalization(fusion)
+        output,logits = imgdecoder(fusion)
+        return output,logits
+
+def discriminator_simple(input_image,input_txt=None,reuse = False):
+    w_init = tf.random_normal_initializer(stddev=0.02)
+    b_init = None  # tf.constant_initializer(value=0.0)
+    gamma_init = tf.random_normal_initializer(1., 0.02)
+    df_dim = 64
+
+
+
+    with tf.variable_scope("discriminator", reuse=reuse):
+        net_input = input_image
+
+        net_h0 = tf.layers.conv2d(inputs=net_input,
+                                  filters=64,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  activation=tf.nn.leaky_relu)
+        net_h1 = tf.layers.conv2d(inputs=net_h0,
+                                  filters=128,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  use_bias=False)
+        net_h1 = tf.layers.batch_normalization(net_h1)
+        net_h1 = tf.nn.leaky_relu(net_h1)
+
+        net_h2 = tf.layers.conv2d(inputs=net_h1,
+                                  filters=256,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  use_bias=False)
+        net_h2 = tf.layers.batch_normalization(net_h2)
+        net_h2 = tf.nn.leaky_relu(net_h2)
+
+        net_h3 = tf.layers.conv2d(inputs=net_h2,
+                                  filters=512,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  use_bias=False)
+        net_h3 = tf.layers.batch_normalization(net_h3)
+
+        txt_feat = input_txt
+        txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
+        txt_feat = tf.tile(txt_feat,multiples=[1,4,4,1])
+
+        net_h3 = tf.concat([net_h3,txt_feat],3)
+        net_h3 = tf.layers.conv2d(inputs=net_h3,
+                                  filters=512,
+                                  kernel_size=1,
+                                  use_bias=False)
+        net_h3 = tf.layers.batch_normalization(net_h3)
+        net_h3 = tf.nn.leaky_relu(net_h3)
+
+        net_h4 = tf.layers.conv2d(inputs=net_h3,
+                                  filters=1,
+                                  kernel_size=4)
+        logits = net_h4
+        output = tf.nn.sigmoid(logits)
+
+    return output,logits
 
 
 t_dim = 128  # text feature dimension
