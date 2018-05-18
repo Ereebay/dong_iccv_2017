@@ -106,10 +106,10 @@ def main_train():
     sess.run(tf.global_variables_initializer())
 
 
-    saver = tf.train.import_meta_graph('./checkpoint/embed/model.meta')
-    saver.restore(sess, tf.train.latest_checkpoint('./checkpoint/embed'))
-    saver = tf.train.import_meta_graph('./checkpoint/gan/model.meta')
-    saver.restore(sess,tf.train.latest_checkpoint('./checkpoint/gan'))
+    # saver = tf.train.import_meta_graph('./checkpoint/embed/model.meta')
+    # saver.restore(sess, tf.train.latest_checkpoint('./checkpoint/embed'))
+    # saver = tf.train.import_meta_graph('./checkpoint/gan/model.meta')
+    # saver.restore(sess,tf.train.latest_checkpoint('./checkpoint/gan'))
 
     # load the latest checkpoints
     net_g_name = os.path.join(save_dir, 'net_g.npz')
