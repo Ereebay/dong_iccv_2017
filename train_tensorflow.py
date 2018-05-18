@@ -105,8 +105,11 @@ def main_train():
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     sess.run(tf.global_variables_initializer())
 
-#    saver = tf.train.import_meta_graph('./checkpoint/model.meta')
-#    saver.restore(sess,tf.train.latest_checkpoint('./checkpoint'))
+
+    saver = tf.train.import_meta_graph('./checkpoint/embed/model.meta')
+    saver.restore(sess, tf.train.latest_checkpoint('./checkpoint/embed'))
+    saver = tf.train.import_meta_graph('./checkpoint/gan/model.meta')
+    saver.restore(sess,tf.train.latest_checkpoint('./checkpoint/gan'))
 
     # load the latest checkpoints
     net_g_name = os.path.join(save_dir, 'net_g.npz')
@@ -199,17 +202,19 @@ def main_train():
                                         t_real_image : images_test})
 
             # img_gen = threading_data(img_gen, prepro_img, mode='rescale')
-            save_images(img_gen, [ni, ni], 'samples/step1_gan-cls/train_{:02d}.png'.format(epoch))
+            save_images(img_gen, [ni, ni], 'samples/after/train_{:02d}.png'.format(epoch))
 
         ## save model
         if (epoch != 0) and (epoch % 10) == 0:
-            tl.files.save_npz(net_g.all_params, name=net_g_name, sess=sess)
-            tl.files.save_npz(net_d.all_params, name=net_d_name, sess=sess)
+            #tl.files.save_npz(net_g.all_params, name=net_g_name, sess=sess)
+            #tl.files.save_npz(net_d.all_params, name=net_d_name, sess=sess)
+            save_path = saver.save(sess,"checkpoint/gan/model")
             print("[*] Save checkpoints SUCCESS!")
 
         if (epoch != 0) and (epoch % 100) == 0:
-            tl.files.save_npz(net_g.all_params, name=net_g_name+str(epoch), sess=sess)
-            tl.files.save_npz(net_d.all_params, name=net_d_name+str(epoch), sess=sess)
+            #tl.files.save_npz(net_g.all_params, name=net_g_name+str(epoch), sess=sess)
+            #tl.files.save_npz(net_d.all_params, name=net_d_name+str(epoch), sess=sess)
+            save_path = saver.save(sess,"checkpoint/gan/model")
 
         # if (epoch != 0) and (epoch % 200) == 0:
         #     sess.run(tf.initialize_variables(adam_vars))

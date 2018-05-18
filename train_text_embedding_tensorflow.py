@@ -79,8 +79,8 @@ def main_train():
     sess.run(tf.global_variables_initializer())
 
 
-    #saver = tf.train.import_meta_graph('./checkpoint/model.meta')
-    #saver.restore(sess,tf.train.latest_checkpoint('./checkpoint'))
+    saver = tf.train.import_meta_graph('./checkpoint/embed/model.meta')
+    saver.restore(sess,tf.train.latest_checkpoint('./checkpoint/embed'))
     n_epoch = 50
     print_freq = 1
     n_batch_epoch = int(n_images_train / batch_size)
@@ -141,13 +141,13 @@ def main_train():
         if (epoch != 0) and (epoch % 10) == 0:
             #tl.files.save_npz(net_cnn.all_params, name=net_cnn_name, sess=sess)
             #tl.files.save_npz(net_rnn.all_params, name=net_rnn_name, sess=sess)
-            save_path = saver.save(sess,"checkpoint/model")
+            save_path = saver.save(sess,"checkpoint/embed/model")
             print("[*] Save checkpoints SUCCESS!")
 
         if (epoch != 0) and (epoch % 100) == 0:
             #tl.files.save_npz(net_cnn.all_params, name=net_cnn_name + str(epoch), sess=sess)
             #tl.files.save_npz(net_rnn.all_params, name=net_rnn_name + str(epoch), sess=sess)
-            save_path = saver.save(sess, "checkpoint/model")
+            save_path = saver.save(sess, "checkpoint/embed/model")
 
 
 if __name__ == '__main__':
