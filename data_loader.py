@@ -109,7 +109,7 @@ if dataset == '102flowers':
 
     captions_ids_train, captions_ids_test = captions_ids[: 8000 * n_captions_per_image], captions_ids[
                                                                                          8000 * n_captions_per_image:]  # 正序装入idstrain 倒序装入test
-    images_train, images_test = images[:8000], images[8000:]
+    images_train, images_test = images[:8000], images[8125:]
     n_images_train = len(images_train)
     n_images_test = len(images_test)
     n_captions_train = len(captions_ids_train)
