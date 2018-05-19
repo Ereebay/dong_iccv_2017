@@ -39,7 +39,8 @@ def residualblcok(input,w_init,gamma_init):
                               use_bias=False,
                               kernel_initializer=w_init)
     net_h1 = tf.layers.batch_normalization(net_h1,gamma_initializer=gamma_init)
-    return net_h1
+    net_h2 = tf.nn.relu(input+net_h1)
+    return net_h2
 
 def generator_simple(input_img, input_txt=None, reuse=False):
 

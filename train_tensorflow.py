@@ -125,11 +125,11 @@ def main_train():
     # saver.restore(sess,tf.train.latest_checkpoint('./checkpoint/gan'))
 
     # load the latest checkpoints
-    net_g_name = os.path.join(save_dir, 'net_g.npz')
-    net_d_name = os.path.join(save_dir, 'net_d.npz')
-
-    load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
-    load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
+    # net_g_name = os.path.join(save_dir, 'net_g.npz')
+    # net_d_name = os.path.join(save_dir, 'net_d.npz')
+    #
+    # load_and_assign_npz(sess=sess, name=net_g_name, model=net_g)
+    # load_and_assign_npz(sess=sess, name=net_d_name, model=net_d)
 
     ## seed for generation, z and sentence ids
     sample_size = batch_size
