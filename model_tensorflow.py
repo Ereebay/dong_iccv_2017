@@ -21,7 +21,25 @@ def vggclassifier(input):
 
     return output
 
+def residualblcok(input,w_init,gamma_init):
+    net_input = input
+    net_h0 = tf.layers.conv2d(inputs=net_input,
+                              filters=512,
+                              kernel_size=3,
+                              padding='same',
+                              use_bias=False,
+                              kernel_initializer=w_init)
+    net_h0 = tf.layers.batch_normalization(net_h0,gamma_initializer=gamma_init)
+    net_h0 = tf.nn.relu(net_h0)
 
+    net_h1 = tf.layers.conv2d(inputs=net_h0,
+                              filters=512,
+                              kernel_size=3,
+                              padding='same',
+                              use_bias=False,
+                              kernel_initializer=w_init)
+    net_h1 = tf.layers.batch_normalization(net_h1,gamma_initializer=gamma_init)
+    return net_h1
 
 def generator_simple(input_img, input_txt=None, reuse=False):
 
@@ -79,6 +97,12 @@ def generator_simple(input_img, input_txt=None, reuse=False):
                                   use_bias=False,
                                   kernel_initializer=w_init)
         fusion = tf.layers.batch_normalization(fusion, gamma_initializer=gamma_init)
+
+        fusion = residualblcok(fusion,w_init,gamma_init)
+        fusion = residualblcok(fusion,w_init,gamma_init)
+        fusion = residualblcok(fusion, w_init, gamma_init)
+        fusion = residualblcok(fusion, w_init, gamma_init)
+
         ## imgdecoder
         net_input = fusion
 
