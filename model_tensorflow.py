@@ -21,76 +21,6 @@ def vggclassifier(input):
 
     return output
 
-def imgencoder(input):
-    net_input = input
-
-    net_h0 = tf.layers.conv2d(inputs=net_input,
-                              filters=128,
-                              kernel_size=3,
-                              padding='same',
-                              activation=tf.nn.relu,
-                              use_bias=False)
-
-    net_h1 = tf.layers.conv2d(inputs=net_h0,
-                              filters=256,
-                              kernel_size=4,
-                              strides=2,
-                              padding='same',
-                              use_bias=False)
-    net_h1 = tf.layers.batch_normalization(net_h1)
-    net_h1 = tf.nn.relu(net_h1)
-
-    net_h2 = tf.layers.conv2d(inputs=net_h1,
-                              filters=512,
-                              kernel_size=4,
-                              strides=2,
-                              padding='same',
-                              use_bias=False)
-    net_h2 = tf.layers.batch_normalization(net_h2)
-    net_h2 = tf.nn.relu(net_h2)
-
-    net_output = net_h2
-
-    return net_output
-
-def imgdecoder(input):
-    net_input = input
-
-    # net_fc1 = tf.layers.dense(inputs=net_input,
-    #                           units=64*8*16*16)
-    # net_re1 = tf.reshape(net_fc1,[-1,16,16,64*8])
-    # net_bn1 = tf.layers.batch_normalization(net_re1)
-    # net_ac1 = tf.nn.relu(net_bn1)
-
-
-    net_h0 = tf.layers.conv2d_transpose(inputs=net_input,
-                                        filters=256,
-                                        kernel_size=4,
-                                        strides=2,
-                                        padding='same',
-                                        use_bias=False)
-    net_h0 = tf.layers.batch_normalization(net_h0)
-    net_h0 = tf.nn.relu(net_h0)
-
-    net_h1 = tf.layers.conv2d_transpose(inputs=net_h0,
-                                        filters=128,
-                                        kernel_size=4,
-                                        strides=2,
-                                        padding='same',
-                                        use_bias=False)
-    net_h1 = tf.layers.batch_normalization(net_h1)
-    net_h1 = tf.nn.relu(net_h1)
-
-    net_h2 = tf.layers.conv2d_transpose(inputs=net_h1,
-                                        filters=3,
-                                        kernel_size=3,
-                                        padding='same')
-    logits = net_h2
-    net_h2 = tf.nn.tanh(net_h2)
-    output = net_h2
-
-    return output,logits
-
 
 
 def generator_simple(input_img, input_txt=None, reuse=False):
@@ -103,9 +33,42 @@ def generator_simple(input_img, input_txt=None, reuse=False):
     gf_dim = 128
 
     with tf.variable_scope("generator", reuse=reuse):
-        img_feat = imgencoder(input_img)
+        ## imgencoder
+        net_input = input_img
+
+        net_h0 = tf.layers.conv2d(inputs=net_input,
+                                  filters=128,
+                                  kernel_size=3,
+                                  padding='same',
+                                  activation=tf.nn.relu,
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+
+        net_h1 = tf.layers.conv2d(inputs=net_h0,
+                                  filters=256,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h1 = tf.layers.batch_normalization(net_h1,gamma_initializer=gamma_init)
+        net_h1 = tf.nn.relu(net_h1)
+
+        net_h2 = tf.layers.conv2d(inputs=net_h1,
+                                  filters=512,
+                                  kernel_size=4,
+                                  strides=2,
+                                  padding='same',
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h2 = tf.layers.batch_normalization(net_h2,gamma_initializer=gamma_init)
+        net_h2 = tf.nn.relu(net_h2)
+
+        net_output = net_h2
+        img_feat = net_output
+
         txt_feat = input_txt
-        txt_feat =tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu)
+        txt_feat =tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu,kernel_initializer=w_init)
         txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
         txt_feat = tf.tile(txt_feat,multiples=[1,16,16,1])
         fusion = tf.concat([img_feat,txt_feat],3)
@@ -113,9 +76,41 @@ def generator_simple(input_img, input_txt=None, reuse=False):
                                   filters=512,
                                   kernel_size=3,
                                   padding='same',
-                                  use_bias=False)
-        fusion = tf.layers.batch_normalization(fusion)
-        output,logits = imgdecoder(fusion)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        fusion = tf.layers.batch_normalization(fusion, gamma_initializer=gamma_init)
+        ## imgdecoder
+        net_input = fusion
+
+        net_h0 = tf.layers.conv2d_transpose(inputs=net_input,
+                                            filters=256,
+                                            kernel_size=4,
+                                            strides=2,
+                                            padding='same',
+                                            use_bias=False,
+                                            kernel_initializer=w_init)
+        net_h0 = tf.layers.batch_normalization(net_h0,gamma_initializer=gamma_init)
+        net_h0 = tf.nn.relu(net_h0)
+
+        net_h1 = tf.layers.conv2d_transpose(inputs=net_h0,
+                                            filters=128,
+                                            kernel_size=4,
+                                            strides=2,
+                                            padding='same',
+                                            use_bias=False,
+                                            kernel_initializer=w_init)
+        net_h1 = tf.layers.batch_normalization(net_h1,gamma_initializer=w_init)
+        net_h1 = tf.nn.relu(net_h1)
+
+        net_h2 = tf.layers.conv2d_transpose(inputs=net_h1,
+                                            filters=3,
+                                            kernel_size=3,
+                                            padding='same',
+                                            kernel_initializer=w_init)
+        logits = net_h2
+        net_h2 = tf.nn.tanh(net_h2)
+        output = net_h2
+
         return output,logits
 
 def discriminator_simple(input_image,input_txt=None,reuse = False):
@@ -134,14 +129,17 @@ def discriminator_simple(input_image,input_txt=None,reuse = False):
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  activation=tf.nn.leaky_relu)
+                                  activation=tf.nn.leaky_relu,
+                                  kernel_initializer=w_init
+                                  )
         net_h1 = tf.layers.conv2d(inputs=net_h0,
                                   filters=128,
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  use_bias=False)
-        net_h1 = tf.layers.batch_normalization(net_h1)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h1 = tf.layers.batch_normalization(net_h1,gamma_initializer=gamma_init)
         net_h1 = tf.nn.leaky_relu(net_h1)
 
         net_h2 = tf.layers.conv2d(inputs=net_h1,
@@ -149,8 +147,9 @@ def discriminator_simple(input_image,input_txt=None,reuse = False):
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  use_bias=False)
-        net_h2 = tf.layers.batch_normalization(net_h2)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h2 = tf.layers.batch_normalization(net_h2, gamma_initializer=gamma_init)
         net_h2 = tf.nn.leaky_relu(net_h2)
 
         net_h3 = tf.layers.conv2d(inputs=net_h2,
@@ -158,11 +157,12 @@ def discriminator_simple(input_image,input_txt=None,reuse = False):
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  use_bias=False)
-        net_h3 = tf.layers.batch_normalization(net_h3)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h3 = tf.layers.batch_normalization(net_h3,gamma_initializer=gamma_init)
 
         txt_feat = input_txt
-        txt_feat = tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu)
+        txt_feat = tf.layers.dense(txt_feat,128,activation=tf.nn.leaky_relu,kernel_initializer=w_init)
         txt_feat = tf.expand_dims(tf.expand_dims(txt_feat,1),1)
         txt_feat = tf.tile(txt_feat,multiples=[1,4,4,1])
 
@@ -170,13 +170,15 @@ def discriminator_simple(input_image,input_txt=None,reuse = False):
         net_h3 = tf.layers.conv2d(inputs=net_h3,
                                   filters=512,
                                   kernel_size=1,
-                                  use_bias=False)
-        net_h3 = tf.layers.batch_normalization(net_h3)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h3 = tf.layers.batch_normalization(net_h3, gamma_initializer=gamma_init)
         net_h3 = tf.nn.leaky_relu(net_h3)
 
         net_h4 = tf.layers.conv2d(inputs=net_h3,
                                   filters=1,
-                                  kernel_size=4)
+                                  kernel_size=4,
+                                  kernel_initializer=w_init)
         logits = net_h4
         output = tf.nn.sigmoid(logits)
 
@@ -203,15 +205,18 @@ def cnn_encoder(inputs, reuse=False, name='cnnftxt'):
                                   kernel_size=3,
                                   padding='same',
                                   activation=tf.nn.relu,
-                                  use_bias=False)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
 
         net_h1 = tf.layers.conv2d(inputs=net_h0,
                                   filters=256,
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  use_bias=False)
-        net_h1 = tf.layers.batch_normalization(net_h1)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h1 = tf.layers.batch_normalization(net_h1,
+                                               gamma_initializer=gamma_init)
         net_h1 = tf.nn.relu(net_h1)
 
         net_h2 = tf.layers.conv2d(inputs=net_h1,
@@ -219,12 +224,14 @@ def cnn_encoder(inputs, reuse=False, name='cnnftxt'):
                                   kernel_size=4,
                                   strides=2,
                                   padding='same',
-                                  use_bias=False)
-        net_h2 = tf.layers.batch_normalization(net_h2)
+                                  use_bias=False,
+                                  kernel_initializer=w_init)
+        net_h2 = tf.layers.batch_normalization(net_h2,
+                                               gamma_initializer=gamma_init)
         net_h2 = tf.nn.relu(net_h2)
 
         net_h3 = tf.layers.flatten(net_h2)
-        net_h3 = tf.layers.dense(inputs=net_h3, units=128)
+        net_h3 = tf.layers.dense(inputs=net_h3, units=128, kernel_initializer=w_init)
 
         net_output = net_h3
 
