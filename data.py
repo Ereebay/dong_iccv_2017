@@ -7,13 +7,15 @@ from nltk.tokenize import RegexpTokenizer
 
 import torch
 import torch.utils.data as data
-from torch.utils.serialization import load_lua
+import torchfile
 import torchvision.transforms as transforms
 
 
 def split_sentence_into_words(sentence):
     tokenizer = RegexpTokenizer(r'\w+')
     return tokenizer.tokenize(sentence.lower())
+
+
 
 
 class ReedICML2016(data.Dataset):
@@ -38,11 +40,13 @@ class ReedICML2016(data.Dataset):
                 cls = line.replace('\n', '')
                 filenames = os.listdir(os.path.join(caption_root, cls))
                 for filename in filenames:
-                    datum = load_lua(os.path.join(caption_root, cls, filename))
-                    raw_desc = datum['char'].numpy()
+                    datum = torchfile.load(os.path.join(caption_root, cls, filename))
+
+                    raw_desc = datum[b'char']
+                    imgdir = str(datum[b'img'], encoding='utf-8')
                     desc, len_desc = self._get_word_vectors(raw_desc, word_embedding)
                     output.append({
-                        'img': os.path.join(img_root, datum['img']),
+                        'img': os.path.join(img_root, imgdir),
                         'desc': desc,
                         'len_desc': len_desc
                     })

@@ -74,7 +74,7 @@ class Generator(nn.Module):
         if use_vgg:
             self.encoder = models.vgg16_bn(pretrained=True)
             self.encoder = \
-                nn.Sequential(*(self.encoder.features[i] for i in range(23) + range(24, 33)))
+                nn.Sequential(*(self.encoder.features[i] for i in list(range(23)) + list(range(24, 33))))
             self.encoder[24].dilation = (2, 2)
             self.encoder[24].padding = (2, 2)
             self.encoder[27].dilation = (2, 2)

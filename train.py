@@ -1,6 +1,6 @@
 import argparse
-import fasttext
 import numpy as np
+import time
 
 import torch
 import torch.nn as nn
@@ -10,24 +10,26 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
+from pyfasttext import FastText
 
 from model import VisualSemanticEmbedding
 from model import Generator, Discriminator
 from data import ReedICML2016
-
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_root', type=str, required=True,
+parser.add_argument('--img_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/CUB_200_2011/images',
                     help='root directory that contains images')
-parser.add_argument('--caption_root', type=str, required=True,
+parser.add_argument('--caption_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/cub_icml',
                     help='root directory that contains captions')
-parser.add_argument('--trainclasses_file', type=str, required=True,
+parser.add_argument('--trainclasses_file', type=str, required=False, default='trainvalclasses.txt',
                     help='text file that contains training classes')
-parser.add_argument('--fasttext_model', type=str, required=True,
+parser.add_argument('--fasttext_model', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/wiki.en.bin',
                     help='pretrained fastText model (binary file)')
-parser.add_argument('--text_embedding_model', type=str, required=True,
+parser.add_argument('--text_embedding_model', type=str, required=False, default='./models/text_embedding_birds.pth',
                     help='pretrained text embedding model')
-parser.add_argument('--save_filename', type=str, required=True,
+parser.add_argument('--save_filename', type=str, required=False, default='./models/birds.pth ',
                     help='checkpoint file')
 parser.add_argument('--num_threads', type=int, default=4,
                     help='number of threads for fetching data (default: 4)')
@@ -45,7 +47,7 @@ parser.add_argument('--embed_ndim', type=int, default=300,
                     help='dimension of embedded vector (default: 300)')
 parser.add_argument('--max_nwords', type=int, default=50,
                     help='maximum number of words (default: 50)')
-parser.add_argument('--use_vgg', action='store_true',
+parser.add_argument('--use_vgg', action='store_true', default=True,
                     help='use pretrained VGG network for image encoder')
 parser.add_argument('--no_cuda', action='store_true',
                     help='do not use cuda')
@@ -62,9 +64,10 @@ def preprocess(img, desc, len_desc, txt_encoder):
 
     len_desc = len_desc.numpy()
     sorted_indices = np.argsort(len_desc)[::-1]
+    new_sorted_indices = sorted_indices.copy()
     original_indices = np.argsort(sorted_indices)
     packed_desc = nn.utils.rnn.pack_padded_sequence(
-        desc[sorted_indices, ...].transpose(0, 1),
+        desc[new_sorted_indices, ...].transpose(0, 1),
         len_desc[sorted_indices]
     )
     _, txt_feat = txt_encoder(packed_desc)
@@ -85,7 +88,7 @@ def preprocess(img, desc, len_desc, txt_encoder):
 
 if __name__ == '__main__':
     print('Loading a pretrained fastText model...')
-    word_embedding = fasttext.load_model(args.fasttext_model)
+    word_embedding = FastText(args.fasttext_model)
 
     print('Loading a dataset...')
     train_data = ReedICML2016(args.img_root,
@@ -99,13 +102,15 @@ if __name__ == '__main__':
                                   transforms.RandomHorizontalFlip(),
                                   transforms.ToTensor()
                               ]))
+    print('num_samples: %d' % train_data.__len__())
     vgg_normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
 
     train_loader = data.DataLoader(train_data,
                                    batch_size=args.batch_size,
                                    shuffle=True,
-                                   num_workers=args.num_threads)
+                                   num_workers=args.num_threads,
+                                   drop_last=True)
 
     word_embedding = None
 
@@ -143,11 +148,18 @@ if __name__ == '__main__':
         avg_G_fake_loss = 0
         avg_kld = 0
         for i, (img, desc, len_desc) in enumerate(train_loader):
+            steptime = time.time()
             img, txt_feat, txt_feat_mismatch, txt_feat_relevant = \
                 preprocess(img, desc, len_desc, txt_encoder)
             img_norm = img * 2 - 1
-            img_G = Variable(vgg_normalize(img.data)) if args.use_vgg else img_norm
+            test = img_norm
+            after = (test.data + 1) * 0.5
+            # vgg = vgg_normalize(img.data)
+            # save_image(vgg, './examples/original_%d.png' % (epoch+1))
+            save_image(test, './examples/original_%d.png' % (epoch+1))
+            save_image(after, './examples/after_%d.png' % (epoch+1))
 
+            img_G = Variable(torch.stack([vgg_normalize(i) for i in img.data])) if args.use_vgg else img_norm
             ONES = Variable(torch.ones(img.size(0)))
             ZEROS = Variable(torch.zeros(img.size(0)))
             if not args.no_cuda:
@@ -158,18 +170,18 @@ if __name__ == '__main__':
             # real image with matching text
             real_logit = D(img_norm, txt_feat)
             real_loss = F.binary_cross_entropy_with_logits(real_logit, ONES)
-            avg_D_real_loss += real_loss.data[0]
+            avg_D_real_loss += real_loss.item()
             real_loss.backward()
             # real image with mismatching text
             real_m_logit = D(img_norm, txt_feat_mismatch)
             real_m_loss = 0.5 * F.binary_cross_entropy_with_logits(real_m_logit, ZEROS)
-            avg_D_real_m_loss += real_m_loss.data[0]
+            avg_D_real_m_loss += real_m_loss.item()
             real_m_loss.backward()
             # synthesized image with semantically relevant text
             fake, _ = G(img_G, txt_feat_relevant)
             fake_logit = D(fake.detach(), txt_feat_relevant)
             fake_loss = 0.5 * F.binary_cross_entropy_with_logits(fake_logit, ZEROS)
-            avg_D_fake_loss += fake_loss.data[0]
+            avg_D_fake_loss += fake_loss.item()
             fake_loss.backward()
             d_optimizer.step()
 
@@ -177,18 +189,17 @@ if __name__ == '__main__':
             G.zero_grad()
             fake, (z_mean, z_log_stddev) = G(img_G, txt_feat_relevant)
             kld = torch.mean(-z_log_stddev + 0.5 * (torch.exp(2 * z_log_stddev) + torch.pow(z_mean, 2) - 1))
-            avg_kld += kld.data[0]
+            avg_kld += kld.item()
             fake_logit = D(fake, txt_feat_relevant)
             fake_loss = F.binary_cross_entropy_with_logits(fake_logit, ONES)
-            avg_G_fake_loss += fake_loss.data[0]
+            avg_G_fake_loss += fake_loss.item()
             G_loss = fake_loss + kld
             G_loss.backward()
             g_optimizer.step()
 
-            if i % 10 == 0:
-                print('Epoch [%d/%d], Iter [%d/%d], D_real: %.4f, D_mis: %.4f, D_fake: %.4f, G_fake: %.4f, KLD: %.4f'
-                      % (epoch + 1, args.num_epochs, i + 1, len(train_loader), avg_D_real_loss / (i + 1),
+            print('Epoch [%d/%d], Iter [%d/%d], Time [%.4f], D_real: %.4f, D_mis: %.4f, D_fake: %.4f, G_fake: %.4f, KLD: %.4f'
+                      % (epoch + 1, args.num_epochs, i + 1, len(train_loader), time.time() - steptime, avg_D_real_loss / (i + 1),
                       avg_D_real_m_loss / (i + 1), avg_D_fake_loss / (i + 1), avg_G_fake_loss / (i + 1), avg_kld / (i + 1)))
 
-        save_image((fake.data + 1) * 0.5, './examples/epoch_%d.png' % (epoch + 1))
+        save_image(fake.data, './examples/epoch_%d.png' % (epoch + 1))
         torch.save(G.state_dict(), args.save_filename)

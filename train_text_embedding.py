@@ -10,17 +10,21 @@ import torchvision.transforms as transforms
 from model import VisualSemanticEmbedding
 from data import ReedICML2016
 
+from pyfasttext import FastText
+
+vocab_size = 8000
+embedding_dim=256
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_root', type=str, required=True,
+parser.add_argument('--img_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/CUB_200_2011/images',
                     help='root directory that contains images')
-parser.add_argument('--caption_root', type=str, required=True,
+parser.add_argument('--caption_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/cub_icml',
                     help='root directory that contains captions')
-parser.add_argument('--trainclasses_file', type=str, required=True,
+parser.add_argument('--trainclasses_file', type=str, required=False, default='trainvalclasses.txt',
                     help='text file that contains training classes')
-parser.add_argument('--fasttext_model', type=str, required=True,
+parser.add_argument('--fasttext_model', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/wiki.en.bin',
                     help='pretrained fastText model (binary file)')
-parser.add_argument('--save_filename', type=str, required=True,
+parser.add_argument('--save_filename', type=str, required=False, default='./models/text_embedding_birds.pth',
                     help='checkpoint file')
 parser.add_argument('--num_threads', type=int, default=4,
                     help='number of threads for fetching data (default: 4)')
@@ -63,7 +67,8 @@ def pairwise_ranking_loss(margin, x, v):
 
 if __name__ == '__main__':
     print('Loading a pretrained fastText model...')
-    word_embedding = fasttext.load_model(args.fasttext_model)
+    word_embedding = FastText(args.fasttext_model)
+    # word_embedding = nn.Embedding(vocab_size, embedding_dim)
 
     print('Loading a dataset...')
     train_data = ReedICML2016(args.img_root,
@@ -108,12 +113,11 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             img_feat, txt_feat = model(img, desc)
             loss = pairwise_ranking_loss(args.margin, img_feat, txt_feat)
-            avg_loss += loss.data[0]
+            avg_loss += loss.item()
             loss.backward()
             optimizer.step()
 
-            if i % 10 == 0:
-                print('Epoch [%d/%d], Iter [%d/%d], Loss: %.4f'
+            print('Epoch [%d/%d], Iter [%d/%d], Loss: %.4f'
                       % (epoch + 1, args.num_epochs, i + 1, len(train_loader), avg_loss / (i + 1)))
 
         torch.save(model.state_dict(), args.save_filename)
