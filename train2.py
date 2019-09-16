@@ -35,13 +35,13 @@ parser.add_argument('--fasttext_model', type=str, required=False,
                     help='pretrained fastText model (binary file)')
 parser.add_argument('--text_embedding_model', type=str, required=False, default='./models/text_embedding_birds.pth',
                     help='pretrained text embedding model')
-parser.add_argument('--save_filename', type=str, required=False, default='./models/birds_vgg_2.pth',
+parser.add_argument('--save_filename', type=str, required=False, default='./models/birds_vgg_new.pth',
                     help='checkpoint file')
-parser.add_argument('--num_threads', type=int, default=4,
+parser.add_argument('--num_threads', type=int, default=8,
                     help='number of threads for fetching data (default: 4)')
 parser.add_argument('--num_epochs', type=int, default=600,
                     help='number of threads for fetching data (default: 600)')
-parser.add_argument('--batch_size', type=int, default=64,
+parser.add_argument('--batch_size', type=int, default=32,
                     help='batch size (default: 64)')
 parser.add_argument('--learning_rate', type=float, default=0.0002,
                     help='learning rate (dafault: 0.0002)')
@@ -169,39 +169,67 @@ if __name__ == '__main__':
                                    batch_size=args.batch_size,
                                    shuffle=True,
                                    num_workers=args.num_threads,
-                                   drop_last=True)
+                                   drop_last=True,)
 
-    word_embedding = None
+    # word_embedding = None
 
     # pretrained text embedding model
-    print('Loading a pretrained text embedding model...')
-    txt_encoder = VisualSemanticEmbedding(args.embed_ndim)
-    txt_encoder.load_state_dict(torch.load(args.text_embedding_model))
-    txt_encoder = txt_encoder.txt_encoder
-    for param in txt_encoder.parameters():
-        param.requires_grad = False
+    # print('Loading a pretrained text embedding model...')
+    # txt_encoder = VisualSemanticEmbedding(args.embed_ndim)
+    # txt_encoder.load_state_dict(torch.load(args.text_embedding_model))
+    # txt_encoder = txt_encoder.txt_encoder
+    # for param in txt_encoder.parameters():
+    #     param.requires_grad = False
 
     # G = Generator(use_vgg=args.use_vgg)
     # D = Discriminator()
-
+    # Load network
     G = NewG_Net()
-    D = NEWD_NET64()
     G.apply(weights_init)
-    D.apply(weights_init)
-    inception_model = INCEPTION_V3().cuda()
-    inception_model.eval()
+    G = torch.nn.DataParallel(G, device_ids=[0,1])
+    G.cuda(0)
+    D = []
+    D.append(NEWD_NET64())
+    D.append(D_NET128())
+    D.append(D_NET256())
+    for i in range(len(D)):
+        D[i].apply(weights_init)
+        D[i] = torch.nn.DataParallel(D[i], device_ids=[0,1])
+        D[i].cuda(0)
+    # AllPARA=[]
+    # G_para = G.named_parameters()
+    # for name, prar in G_para:
+    #     if prar.requires_grad==False:
+    #         AllPARA.append(name)
+    # for i in range(len(D)):
+    #     D_para = D[i].named_parameters()
+    #     for name, para in D_para:
+    #         if para.requires_grad==False:
+    #             AllPARA.append(name)
+    #
+    # print(AllPARA)
+    # inception_model = INCEPTION_V3().cuda()
+    # inception_model.eval()
 
-    if not args.no_cuda:
-        txt_encoder.cuda()
-        G.cuda()
-        D.cuda()
+    # if not args.no_cuda:
+    #     txt_encoder.cuda()
+    #     G.cuda()
+    #     D.cuda()
 
     g_optimizer = torch.optim.Adam(filter(lambda x: x.requires_grad, G.parameters()),
                                    lr=args.learning_rate, betas=(args.momentum, 0.999))
-    d_optimizer = torch.optim.Adam(filter(lambda x: x.requires_grad, D.parameters()),
+    d_optimizers = []
+    d_lr_scheduler = []
+    for i in range(3):
+        opt = torch.optim.Adam(filter(lambda x: x.requires_grad, D[i].parameters()),
                                    lr=args.learning_rate, betas=(args.momentum, 0.999))
+        d_optimizers.append(opt)
+        scheduler = lr_scheduler.StepLR(opt, 100, args.lr_decay)
+        d_lr_scheduler.append(scheduler)
+    # d_optimizer = torch.optim.Adam(filter(lambda x: x.requires_grad, D.parameters()),
+    #                                lr=args.learning_rate, betas=(args.momentum, 0.999))
     g_lr_scheduler = lr_scheduler.StepLR(g_optimizer, 100, args.lr_decay)
-    d_lr_scheduler = lr_scheduler.StepLR(d_optimizer, 100, args.lr_decay)
+    # d_lr_scheduler = lr_scheduler.StepLR(d_optimizer, 100, args.lr_decay)
 
     predictions = []
     count = 0
@@ -209,7 +237,10 @@ if __name__ == '__main__':
     std = 0
     for epoch in range(args.num_epochs):
         start_t = time.time()
-        d_lr_scheduler.step()
+        # d_lr_scheduler.step()
+        for i in range(3):
+            d_lr_scheduler[i].step()
+
         g_lr_scheduler.step()
         print('start training')
         # training loop
@@ -218,73 +249,93 @@ if __name__ == '__main__':
         avg_D_fake_loss = 0
         avg_G_fake_loss = 0
         avg_kld = 0
+        criterion = nn.BCELoss()
+        criterion.cuda(0)
         # for i, (img, desc, len_desc, classid) in enumerate(train_loader):
         for index, (img, embedding, wrongembedding, relevant) in enumerate(train_loader):
-            img = img.cuda()
-            txt_feat = embedding.cuda()
-            txt_feat_mismatch = wrongembedding.cuda()
-            txt_feat_relevant = relevant.cuda()
+            temp = img
+            img_norm=[]
+            for i in range(3):
+                img_norm.append(img[i] * 2 - 1)
+                img_norm[i].cuda(0)
+            txt_feat = embedding.cuda(0)
+            txt_feat_mismatch = wrongembedding.cuda(0)
+            txt_feat_relevant = relevant.cuda(0)
             steptime = time.time()
 
             # img, txt_feat, txt_feat_mismatch, txt_feat_relevant = \
             #     preprocess(img, desc, len_desc, txt_encoder)
-            img_norm = img * 2 - 1
+            # img_norm = img * 2 - 1
             # test = img_norm
             # after = (test.data + 1) * 0.5
             # vgg = vgg_normalize(img.data)
-            vgg = torch.stack([vgg_normalize(i) for i in img.data])
+            vgg = torch.stack([vgg_normalize(image) for image in temp[0].data])
+            vgg.cuda(0)
+
             # img_norm = vgg
             # vgg_norm = vgg * 2 - 1
-            img_G = Variable(vgg)
-            ONES = Variable(torch.ones(img.size(0)))
-            ZEROS = Variable(torch.zeros(img.size(0)))
+            # ONES = torch.ones(24)
+            # ZEROS = torch.zeros(24)
+            ONES = torch.FloatTensor(32).fill_(1)
+            ZEROS = torch.FloatTensor(32).fill_(0)
             if not args.no_cuda:
-                ONES, ZEROS = ONES.cuda(), ZEROS.cuda()
+                ONES, ZEROS = ONES.cuda(0), ZEROS.cuda(0)
+            fake, z_mean, z_log_stddev = G(vgg, txt_feat_relevant)
+            for i in range(3):
+                # UPDATE DISCRIMINATOR
+                D[i].zero_grad()
+                # real image with matching text
+                real_logit = D[i](img_norm[i], txt_feat)
+                # real_loss = F.binary_cross_entropy_with_logits(real_logit, ONES)
+                real_loss = criterion(real_logit, ONES)
+                avg_D_real_loss += real_loss.item()
+                # real_loss.backward()
+                # real image with mismatching text
+                real_m_logit = D[i](img_norm[i], txt_feat_mismatch)
+                # real_m_loss = 0.5 * F.binary_cross_entropy_with_logits(real_m_logit, ZEROS)
+                real_m_loss = 0.5 * criterion(real_m_logit, ZEROS)
+                avg_D_real_m_loss += real_m_loss.item()
+                # real_m_loss.backward()
+                # synthesized image with semantically relevant text
+                fake_logit = D[i](fake[i].detach(), txt_feat_relevant)
+                # fake_loss = 0.5 * F.binary_cross_entropy_with_logits(fake_logit, ZEROS)
+                fake_loss = 0.5 * criterion(fake_logit, ZEROS)
+                avg_D_fake_loss += fake_loss.item()
+                # fake_loss.backward()
+                errD = real_loss + real_m_loss + fake_loss
+                errD.backward()
+                d_optimizers[i].step()
 
-            # UPDATE DISCRIMINATOR
-            D.zero_grad()
-            # real image with matching text
-            real_logit = D(img_norm, txt_feat)
-            real_loss = F.binary_cross_entropy_with_logits(real_logit, ONES)
-            avg_D_real_loss += real_loss.item()
-            real_loss.backward()
-            # real image with mismatching text
-            real_m_logit = D(img_norm, txt_feat_mismatch)
-            real_m_loss = 0.5 * F.binary_cross_entropy_with_logits(real_m_logit, ZEROS)
-            avg_D_real_m_loss += real_m_loss.item()
-            real_m_loss.backward()
-            # synthesized image with semantically relevant text
-            fake, _, _ = G(img_G, txt_feat_relevant)
-            fake_logit = D(fake.detach(), txt_feat_relevant)
-            fake_loss = 0.5 * F.binary_cross_entropy_with_logits(fake_logit, ZEROS)
-            avg_D_fake_loss += fake_loss.item()
-            fake_loss.backward()
-            d_optimizer.step()
 
             # UPDATE GENERATOR
             G.zero_grad()
-            fake, z_mean, z_log_stddev = G(img_G, txt_feat_relevant)
+            G_loss=0
+
             KLD_element = z_mean.pow(2).add_(z_log_stddev.exp()).mul_(-1).add_(1).add_(z_log_stddev)
             kld = torch.mean(KLD_element).mul_(-0.5)
             # kld = torch.mean(-z_log_stddev + 0.5 * (torch.exp(z_log_stddev) + torch.pow(z_mean, 2) - 1))
             avg_kld += kld.item()
-            fake_logit = D(fake, txt_feat_relevant)
-            fake_loss = F.binary_cross_entropy_with_logits(fake_logit, ONES)
-            avg_G_fake_loss += fake_loss.item()
-            G_loss = fake_loss + kld
+            for i in range(3):
+                fake_logit = D[i](fake[i], txt_feat_relevant)
+                # fake_loss = F.binary_cross_entropy_with_logits(fake_logit, ONES)
+                fake_loss = criterion(fake_logit, ONES)
+                avg_G_fake_loss += fake_loss.item()
+                G_loss += fake_loss
+            G_loss = G_loss+kld
             G_loss.backward()
+
             g_optimizer.step()
 
-            pred = inception_model(fake.detach())
-            predictions.append(pred.data.cpu().numpy())
-
-
-            # compute inception score
-            if len(predictions) > 500:
-                predictions = np.concatenate(predictions, 0)
-                mean, std = compute_inception_score(predictions, 10)
-                print('mean:', mean, 'std:', std)
-                predictions = []
+            # pred = inception_model(fake.detach())
+            # predictions.append(pred.data.cpu().numpy())
+            #
+            #
+            # # compute inception score
+            # if len(predictions) > 500:
+            #     predictions = np.concatenate(predictions, 0)
+            #     mean, std = compute_inception_score(predictions, 10)
+            #     print('mean:', mean, 'std:', std)
+            #     predictions = []
 
             # print(
             #     'Epoch [%d/%d], Iter [%d/%d], Time [%.4f], D_real: %.4f, D_mis: %.4f, D_fake: %.4f, G_fake: %.4f, KLD: %.4f, IS: %.4f, std: %.4f'
@@ -294,13 +345,14 @@ if __name__ == '__main__':
             #        avg_kld / (index + 1)), mean, std)
             print(f'Epoch [{epoch + 1}/{args.num_epochs}], Iter [{index + 1}/{len(train_loader)}],'
                   f'Time [{(time.time() - steptime):.2f}], D_real:{(avg_D_real_loss / (index + 1)):.4f},'
-                  f'D_mis:{(avg_D_real_m_loss / (index + 1)):.4f}, D_fake:{(avg_G_fake_loss / (index + 1)):.4f},'f'KLD:{(avg_kld / (index + 1)):.4f}, IS:{mean:.4f}, STD:{std:.4f}')
+                  f'D_mis:{(avg_D_real_m_loss / (index + 1)):.4f}, D_fake:{(avg_G_fake_loss / (index + 1)):.4f},'
+                  f'KLD:{(avg_kld / (index + 1)):.4f}, IS:{mean:.4f}, STD:{std:.4f}')
 
         # for i in range(64):
         #     save_image(fake.data[2][i], './examples/kdd/birds/epoch_%d_%d.png' %(epoch+1, i))
         # save_image(fake.data, './examples/epochnorm_%d.png' % (epoch + 1), normalize=True)
-        save_image((fake.data + 1) / 2, './examples/64epoch_%d.png' % (epoch + 1))
-        # save_image((fake[1].data + 1)/2, './examples/128epoch_%d.png' % (epoch + 1))
-        # save_image((fake[2].data + 1)/2, './examples/256epoch_%d.png' % (epoch + 1))
+        save_image((fake[0].data + 1) / 2, './examples/64epoch_%d.png' % (epoch + 1))
+        save_image((fake[1].data + 1) / 2, './examples/128epoch_%d.png' % (epoch + 1))
+        save_image((fake[2].data + 1) / 2, './examples/256epoch_%d.png' % (epoch + 1))
 
         torch.save(G.state_dict(), args.save_filename)

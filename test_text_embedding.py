@@ -1,4 +1,5 @@
 import argparse
+import fasttext
 
 import torch
 import torch.nn as nn
@@ -10,20 +11,18 @@ from model import VisualSemanticEmbedding
 from data import ReedICML2016
 
 from pyfasttext import FastText
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 vocab_size = 8000
 embedding_dim=256
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--img_root', type=str, required=False, default='/data/CUB_200_2011/images',
+parser.add_argument('--img_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/CUB_200_2011/images',
                     help='root directory that contains images')
-parser.add_argument('--caption_root', type=str, required=False, default='/data/cub_icml',
+parser.add_argument('--caption_root', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/cub_icml',
                     help='root directory that contains captions')
 parser.add_argument('--trainclasses_file', type=str, required=False, default='trainvalclasses.txt',
                     help='text file that contains training classes')
-parser.add_argument('--fasttext_model', type=str, required=False, default='/data/fasttext/wiki.en.bin',
+parser.add_argument('--fasttext_model', type=str, required=False, default='/home/jxk/dong_iccv_2017/data/CUB_200_2011/wiki.en.bin',
                     help='pretrained fastText model (binary file)')
 parser.add_argument('--save_filename', type=str, required=False, default='./models/text_embedding_birds.pth',
                     help='checkpoint file')
@@ -69,8 +68,6 @@ def pairwise_ranking_loss(margin, x, v):
 if __name__ == '__main__':
     print('Loading a pretrained fastText model...')
     word_embedding = FastText(args.fasttext_model)
-    # word_embedding = nn.Embedding(8000, 256)
-
     # word_embedding = nn.Embedding(vocab_size, embedding_dim)
 
     print('Loading a dataset...')
@@ -83,27 +80,25 @@ if __name__ == '__main__':
                                   transforms.Scale(256),
                                   transforms.RandomCrop(224),
                                   transforms.RandomHorizontalFlip(),
-                                  transforms.ToTensor()
+                                  transforms.ToTensor(),
+                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                       std=[0.229, 0.224, 0.225])
                               ]))
-    print('dataset loaded')
 
     word_embedding = None
-    print('Loading dataloader')
+
     train_loader = data.DataLoader(train_data,
                                    batch_size=args.batch_size,
                                    shuffle=True,
                                    num_workers=args.num_threads)
 
-    print('model initialing')
     model = VisualSemanticEmbedding(args.embed_ndim)
-    #model = torch.nn.parallel.DataParallel(model, device_ids=[1])
     if not args.no_cuda:
         model.cuda()
 
     optimizer = torch.optim.Adam(filter(lambda x: x.requires_grad, model.parameters()),
                                  lr=args.learning_rate)
 
-    print('start training')
     for epoch in range(args.num_epochs):
         avg_loss = 0
         for i, (img, desc, len_desc) in enumerate(train_loader):
@@ -126,3 +121,34 @@ if __name__ == '__main__':
                       % (epoch + 1, args.num_epochs, i + 1, len(train_loader), avg_loss / (i + 1)))
 
         torch.save(model.state_dict(), args.save_filename)
+
+def evaluate(self, data, verbose=False, save_if_better=False):
+    """
+    If using k-fold cross validation in the data module,
+    the data class will handle updaing the self.train and self.test
+    datasets. Thus the data.test_set(True) becomes very important.
+    However, a raw intialization of the dataclass with result in
+    the loaded data being assigned to both test and train, so we can
+    evaluate the results.
+    """
+    print("	* Validating", end="", flush=True)
+    data.test_set(True)  # very important | swaps to iterating over the test set for validation
+    score = 0
+    i2t, t2i = [], []
+    for caption, image_feature in data:
+        x, y = self.forward(caption, image_feature)
+        score_2, t2i_result = evaluate.text_to_image(x, y, verbose=verbose)
+        t2i.append(t2i_result)
+        print(".", end="", flush=True)
+
+    print("[DONE]", end="", flush=True)
+    print("")
+    data.test_set(False)  # also very important | swaps BACK to using the TRAIN set
+    self.average_i2t_and_t2i(i2t, t2i)
+
+    if save_if_better and score > self.best_score:
+        self.save()
+        data.save_dictionaries()
+        self.best_score = score
+
+    return score_2
