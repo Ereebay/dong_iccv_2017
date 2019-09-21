@@ -19,29 +19,30 @@ from data import ReedICML2016
 from data import TextDataset
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--data_dir', type=str, required=False,
+                    default='/home/eree/Documents/StackGAN-v2/data/birds')
 parser.add_argument('--img_root', type=str, required=False,
-                    default='/home/jxk/projects/dong_iccv_2017/data/CUB_200_2011/CUB_200_2011/images',
+                    default='/home/eree/Documents/StackGAN-v2/data/CUB_200_2011/CUB_200_2011/images',
                     help='root directory that contains images')
 parser.add_argument('--caption_root', type=str, required=False,
-                    default='/home/jxk/projects/dong_iccv_2017/data/CUB_200_2011/cub_icml',
+                    default='/home/eree/Documents/StackGAN-v2/data/CUB_200_2011/cub_icml',
                     help='root directory that contains captions')
 parser.add_argument('--trainclasses_file', type=str, required=False, default='trainvalclasses.txt',
                     help='text file that contains training classes')
 parser.add_argument('--fasttext_model', type=str, required=False,
-                    default='/home/jxk/projects/dong_iccv_2017/data/CUB_200_2011/wiki.en.bin',
+                    default='/home/eree/Documents/StackGAN-v2/data/CUB_200_2011/wiki.en.bin',
                     help='pretrained fastText model (binary file)')
 parser.add_argument('--text_embedding_model', type=str, required=False, default='./models/text_embedding_birds.pth',
                     help='pretrained text embedding model')
 parser.add_argument('--save_filename', type=str, required=False, default='./models/birds_vgg_new.pth',
                     help='checkpoint file')
-parser.add_argument('--num_threads', type=int, default=8,
+parser.add_argument('--num_threads', type=int, default=4,
                     help='number of threads for fetching data (default: 4)')
 parser.add_argument('--num_epochs', type=int, default=600,
                     help='number of threads for fetching data (default: 600)')
-parser.add_argument('--batch_size', type=int, default=32,
+parser.add_argument('--batch_size', type=int, default=16,
                     help='batch size (default: 64)')
 parser.add_argument('--learning_rate', type=float, default=0.0002,
                     help='learning rate (dafault: 0.0002)')
@@ -65,8 +66,8 @@ if not args.no_cuda and not torch.cuda.is_available():
 
 
 def preprocess(img, desc, len_desc, txt_encoder):
-    img = Variable(img.cuda() if not args.no_cuda else img)
-    desc = Variable(desc.cuda() if not args.no_cuda else desc)
+    img = img.cuda() if not args.no_cuda else img
+    desc = desc.cuda() if not args.no_cuda else desc
 
     len_desc = len_desc.numpy()
     sorted_indices = np.argsort(len_desc)[::-1]
@@ -158,7 +159,7 @@ if __name__ == '__main__':
         transforms.Resize(int(256 * 76 / 64)),
         transforms.RandomCrop(256),
         transforms.RandomHorizontalFlip()])
-    train_data = TextDataset('/home/jxk/projects/StackGAN-v2/data/birds', 'train',
+    train_data = TextDataset(args.data_dir, 'train',
                              base_size=64,
                              transform=image_transform)
     print('num_samples: %d' % train_data.__len__())
@@ -186,16 +187,16 @@ if __name__ == '__main__':
     # Load network
     G = NewG_Net()
     G.apply(weights_init)
-    G = torch.nn.DataParallel(G, device_ids=[0,1])
-    G.cuda(0)
+    G = torch.nn.DataParallel(G, device_ids=[0])
+    G.cuda()
     D = []
     D.append(NEWD_NET64())
     D.append(D_NET128())
     D.append(D_NET256())
     for i in range(len(D)):
         D[i].apply(weights_init)
-        D[i] = torch.nn.DataParallel(D[i], device_ids=[0,1])
-        D[i].cuda(0)
+        D[i] = torch.nn.DataParallel(D[i], device_ids=[0])
+        D[i].cuda()
     # AllPARA=[]
     # G_para = G.named_parameters()
     # for name, prar in G_para:
@@ -237,11 +238,7 @@ if __name__ == '__main__':
     std = 0
     for epoch in range(args.num_epochs):
         start_t = time.time()
-        # d_lr_scheduler.step()
-        for i in range(3):
-            d_lr_scheduler[i].step()
 
-        g_lr_scheduler.step()
         print('start training')
         # training loop
         avg_D_real_loss = 0
@@ -250,17 +247,17 @@ if __name__ == '__main__':
         avg_G_fake_loss = 0
         avg_kld = 0
         criterion = nn.BCELoss()
-        criterion.cuda(0)
+        criterion.cuda()
         # for i, (img, desc, len_desc, classid) in enumerate(train_loader):
         for index, (img, embedding, wrongembedding, relevant) in enumerate(train_loader):
             temp = img
             img_norm=[]
             for i in range(3):
                 img_norm.append(img[i] * 2 - 1)
-                img_norm[i].cuda(0)
-            txt_feat = embedding.cuda(0)
-            txt_feat_mismatch = wrongembedding.cuda(0)
-            txt_feat_relevant = relevant.cuda(0)
+                img_norm[i].cuda()
+            txt_feat = embedding.cuda()
+            txt_feat_mismatch = wrongembedding.cuda()
+            txt_feat_relevant = relevant.cuda()
             steptime = time.time()
 
             # img, txt_feat, txt_feat_mismatch, txt_feat_relevant = \
@@ -270,16 +267,16 @@ if __name__ == '__main__':
             # after = (test.data + 1) * 0.5
             # vgg = vgg_normalize(img.data)
             vgg = torch.stack([vgg_normalize(image) for image in temp[0].data])
-            vgg.cuda(0)
+            vgg.cuda()
 
             # img_norm = vgg
             # vgg_norm = vgg * 2 - 1
             # ONES = torch.ones(24)
             # ZEROS = torch.zeros(24)
-            ONES = torch.FloatTensor(32).fill_(1)
-            ZEROS = torch.FloatTensor(32).fill_(0)
+            ONES = torch.FloatTensor(16).fill_(1)
+            ZEROS = torch.FloatTensor(16).fill_(0)
             if not args.no_cuda:
-                ONES, ZEROS = ONES.cuda(0), ZEROS.cuda(0)
+                ONES, ZEROS = ONES.cuda(), ZEROS.cuda()
             fake, z_mean, z_log_stddev = G(vgg, txt_feat_relevant)
             for i in range(3):
                 # UPDATE DISCRIMINATOR
@@ -347,7 +344,11 @@ if __name__ == '__main__':
                   f'Time [{(time.time() - steptime):.2f}], D_real:{(avg_D_real_loss / (index + 1)):.4f},'
                   f'D_mis:{(avg_D_real_m_loss / (index + 1)):.4f}, D_fake:{(avg_G_fake_loss / (index + 1)):.4f},'
                   f'KLD:{(avg_kld / (index + 1)):.4f}, IS:{mean:.4f}, STD:{std:.4f}')
+        # d_lr_scheduler.step()
+        for i in range(3):
+            d_lr_scheduler[i].step()
 
+        g_lr_scheduler.step()
         # for i in range(64):
         #     save_image(fake.data[2][i], './examples/kdd/birds/epoch_%d_%d.png' %(epoch+1, i))
         # save_image(fake.data, './examples/epochnorm_%d.png' % (epoch + 1), normalize=True)
