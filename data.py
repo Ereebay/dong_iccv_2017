@@ -157,10 +157,10 @@ class TextDataset(data.Dataset):
         self.captions = self.load_all_captions()
         self.all_info = self.load_all_info(split_dir)
 
-        # if cfg.TRAIN.FLAG:
-        self.iterator = self.prepair_training_pairs
-        # else:
-        #     self.iterator = self.prepair_test_pairs
+        if split=='train':
+            self.iterator = self.prepair_training_pairs
+        else:
+            self.iterator = self.prepair_test_pairs
 
     def load_bbox(self):
         data_dir = self.data_dir
@@ -297,11 +297,12 @@ class TextDataset(data.Dataset):
         img_name = '%s/images/%s.jpg' % (data_dir, key)
         imgs = get_imgs(img_name, self.imsize,
                         bbox, self.transform, normalize=self.norm)
+        attribute_value = self.all_info[index]['attribute_value']
 
         if self.target_transform is not None:
             embeddings = self.target_transform(embeddings)
 
-        return imgs, embeddings, key  # captions
+        return imgs, embeddings, key, captions, attribute_value  # captions
 
     def __getitem__(self, index):
         return self.iterator(index)
