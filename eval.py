@@ -39,7 +39,7 @@ parser.add_argument('--num_threads', type=int, default=4,
                     help='number of threads for fetching data (default: 4)')
 parser.add_argument('--num_epochs', type=int, default=600,
                     help='number of threads for fetching data (default: 600)')
-parser.add_argument('--batch_size', type=int, default=10,
+parser.add_argument('--batch_size', type=int, default=20,
                     help='batch size (default: 64)')
 parser.add_argument('--learning_rate', type=float, default=0.0002,
                     help='learning rate (dafault: 0.0002)')
@@ -109,7 +109,7 @@ def save_singleimages(images, filenames, save_dir, split_dir, sentenceID, imsize
             mkdir_p(folder)
         caption = captions[sentenceID][i]
         from functools import reduce
-        attribute_values = reduce(lambda x, y: torch.cat((x.view(-1, 10),y.view(1,-1)), 0), attribute_values)
+        attribute_values = reduce(lambda x, y: torch.cat((x.view(-1, 20),y.view(1,-1)), 0), attribute_values)
         attribute_value = attribute_values.transpose(0,1)
         attribute_value = attribute_value[i].tolist()
         fullpath = '%s_%d_sentence%d.png' % (s_tmp, imsize, sentenceID)
@@ -208,30 +208,31 @@ if __name__ == '__main__':
     G.cuda()
     noise = noise.cuda()
 
-    G.eval()
-    for step, data in enumerate(train_loader, 0):
-        imgs, t_embeddings, filenames, captions, attribute_values = data
-        t_embeddings = t_embeddings.cuda()
+    with torch.no_grad():
+        G.eval()
+        for step, data in enumerate(train_loader, 0):
+            imgs, t_embeddings, filenames, captions, attribute_values = data
+            t_embeddings = t_embeddings.cuda()
 
-        embedding_dim = t_embeddings.size(1)
-        batch_size = imgs[0].size(0)
-        noise.data.resize_(batch_size, nz)
-        noise.data.normal_(0, 1)
-        temp = imgs
-        vgg = torch.stack([vgg_normalize(image) for image in temp[0].data])
-        vgg.cuda()
+            embedding_dim = t_embeddings.size(1)
+            batch_size = imgs[0].size(0)
+            noise.data.resize_(batch_size, nz)
+            noise.data.normal_(0, 1)
+            temp = imgs
+            vgg = torch.stack([vgg_normalize(image) for image in temp[0].data])
+            vgg.cuda()
 
-        fake_img_list = []
-        if not os.path.isdir(save_dir):
-            print('Make a new folder: ', save_dir)
-            mkdir_p(save_dir)
-        f = open('%s/info.json' % save_dir, 'a')
-        for i in range(embedding_dim):
-            fake_imgs, _, _ = G(vgg, t_embeddings[:, i, :])
-            fake_img_list.append(fake_imgs[2].data.cpu())
-            all_dict = save_singleimages(fake_imgs[-1], filenames, save_dir, 'test', i, 256, attribute_values, captions)
-            for item in all_dict:
-                json.dump(item, f)
-        f.close()
-        save_superimages(fake_img_list, filenames,
-                              save_dir, 'test', 256)
+            fake_img_list = []
+            if not os.path.isdir(save_dir):
+                print('Make a new folder: ', save_dir)
+                mkdir_p(save_dir)
+            f = open('%s/info.json' % save_dir, 'a')
+            for i in range(embedding_dim):
+                fake_imgs, _, _ = G(vgg, t_embeddings[:, i, :])
+                fake_img_list.append(fake_imgs[2].data.cpu())
+                all_dict = save_singleimages(fake_imgs[-1], filenames, save_dir, 'test', i, 256, attribute_values, captions)
+                for item in all_dict:
+                    json.dump(item, f)
+            f.close()
+            save_superimages(fake_img_list, filenames,
+                                save_dir, 'test', 256)
