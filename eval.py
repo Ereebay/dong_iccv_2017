@@ -148,7 +148,23 @@ def save_superimages(images_list, filenames,
             # break
         super_img = torch.cat(super_img, 0)
         vutils.save_image(super_img, savename, nrow=10, normalize=True)
+def save_singleimages2(images, filenames, save_dir, split_dir, sentenceID, imsize):
 
+    for i in range(images.size(0)):
+        s_tmp = '%s/single_samples/%s/%s' % \
+                (save_dir, split_dir, filenames[i])
+        folder = s_tmp[:s_tmp.rfind('/')]
+        if not os.path.isdir(folder):
+            print('Make a new folder: ', folder)
+            mkdir_p(folder)
+        fullpath = '%s_%d_sentence%d.png' % (s_tmp, imsize, sentenceID)
+        savepath = '%s_%d_sentence%d.png' % (filenames[i], imsize, sentenceID)
+        # range from [-1, 1] to [0, 255]images
+        img = images[i].add(1).div(2).mul(255).clamp(0, 255).byte()
+        ndarr = img.permute(1, 2, 0).data.cpu().numpy()
+        im = Image.fromarray(ndarr)
+        im.save(fullpath)
+        print('file of image:', savepath)
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -175,7 +191,8 @@ if __name__ == '__main__':
     image_transform = transforms.Compose([
         transforms.Resize(int(256 * 76 / 64)),
         transforms.RandomCrop(256),
-        transforms.RandomHorizontalFlip()])
+        #transforms.RandomHorizontalFlip()
+        ])
     train_data = TextDataset(args.data_dir, 'test',
                              base_size=64,
                              transform=image_transform)
@@ -231,6 +248,10 @@ if __name__ == '__main__':
                 fake_imgs, _, _ = G(vgg, t_embeddings[:, i, :])
                 fake_img_list.append(fake_imgs[2].data.cpu())
                 all_dict = save_singleimages(fake_imgs[-1], filenames, save_dir, 'test', i, 256, attribute_values, captions)
+                save_singleimages2(fake_imgs[-2], filenames,
+                                        save_dir, '128', i, 128)
+                save_singleimages2(fake_imgs[-3], filenames,
+                                        save_dir, '64', i, 64)
                 for item in all_dict:
                     json.dump(item, f)
             f.close()

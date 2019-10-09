@@ -155,7 +155,7 @@ class TextDataset(data.Dataset):
         self.embeddings = self.load_embedding(split_dir, embedding_type)
         self.class_id = self.load_class_id(split_dir, len(self.filenames))
         self.captions = self.load_all_captions()
-        self.all_info = self.load_all_info(split_dir)
+        # self.all_info = self.load_all_info(split_dir)
 
         if split=='train':
             self.iterator = self.prepair_training_pairs
@@ -257,20 +257,12 @@ class TextDataset(data.Dataset):
                         bbox, self.transform, normalize=self.norm)
 
         wrong_ix = random.randint(0, len(self.filenames) - 1)
-        while(self.class_id[index] != self.class_id[wrong_ix]):
-            wrong_ix = random.randint(0, len(self.filenames) - 1)
-        relevant = wrong_ix
+        relevant_ix = random.randint(0, len(self.filenames) - 1)
+        while(self.class_id[index] != self.class_id[relevant_ix]):
+            relevant_ix = random.randint(0, len(self.filenames) - 1)
+        relevant = relevant_ix
         if(wrong_ix == index):
             wrong_ix = random.randint(0, len(self.filenames) - 1)
-        wrong_key = self.filenames[wrong_ix]
-        if self.bbox is not None:
-            wrong_bbox = self.bbox[wrong_key]
-        else:
-            wrong_bbox = None
-        wrong_img_name = '%s/images/%s.jpg' % \
-            (data_dir, wrong_key)
-        wrong_imgs = get_imgs(wrong_img_name, self.imsize,
-                              wrong_bbox, self.transform, normalize=self.norm)
         wrong_embedings = self.embeddings[wrong_ix, :, :]
         relevant_embeddings = self.embeddings[relevant, :, :]
         embedding_ix = random.randint(0, embeddings.shape[0] - 1)
@@ -286,23 +278,30 @@ class TextDataset(data.Dataset):
 
     def prepair_test_pairs(self, index):
         key = self.filenames[index]
+
         if self.bbox is not None:
             bbox = self.bbox[key]
             data_dir = '%s/CUB_200_2011' % self.data_dir
         else:
             bbox = None
             data_dir = self.data_dir
-        captions = self.captions[key]
-        embeddings = self.embeddings[index, :, :]
+        # bbox = None
+        # data_dir = self.data_dir
+
+        number = str(random.randint(0, 9))
+        wrong_ix = random.randint(0, len(self.filenames) - 1)
+        wrongkey = self.filenames[wrong_ix]
+        captions = self.captions[wrongkey]
+        embeddings = self.embeddings[wrong_ix, :, :]
         img_name = '%s/images/%s.jpg' % (data_dir, key)
         imgs = get_imgs(img_name, self.imsize,
                         bbox, self.transform, normalize=self.norm)
-        attribute_value = self.all_info[index]['attribute_value']
+        # attribute_value = self.all_info[index]['attribute_value']
 
         if self.target_transform is not None:
             embeddings = self.target_transform(embeddings)
 
-        return imgs, embeddings, key, captions, attribute_value  # captions
+        return imgs, embeddings, key, captions# , attribute_value  # captions
 
     def __getitem__(self, index):
         return self.iterator(index)
